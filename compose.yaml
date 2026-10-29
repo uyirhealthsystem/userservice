@@ -1,0 +1,24 @@
+
+services:
+  uyir-service:
+    build:
+      context: .
+    container_name: uyir-service
+    restart: unless-stopped
+
+    env_file:
+      - .env
+    # .env says development (for `npm run dev`); the image has no dev deps
+    # like pino-pretty, so the container must run as production.
+    environment:
+      NODE_ENV: production
+
+    ports:
+      - "127.0.0.1:8089:8089"
+
+    networks:
+      - uyir-backend
+
+networks:
+  uyir-backend:
+    external: true

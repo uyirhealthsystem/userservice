@@ -1,0 +1,118 @@
+name: CI / CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ------------------------------------------------------------------ CI ----
+  test:
+    name: Typecheck + tests + build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: userservice_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    # test/setupEnv.ts fills in the gateway secret, service tokens, ABDM fakes
+    # and the encryption key; only the database has to come from here.
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/userservice_test
+      NODE_ENV: test
+      LOG_LEVEL: silent
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Apply migrations to the test database
+        run: npx prisma migrate deploy
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  # -------------------------------------------------------------- Deploy ----
+  deploy:
+    name: Deploy to EC2
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build release
+        run: npm run build
+
+      - name: Assemble release bundle
+        run: |
+          rm -rf release
+          mkdir -p release
+          cp -r dist package.json package-lock.json prisma release/
+          cp -r deploy release/deploy
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Upload release to EC2
+        run: |
+          rsync -az --delete --mkpath \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            release/ \
+            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/opt/userservice/releases/next/"
+
+      - name: Activate release (migrate, install, restart)
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+            'bash -s' < deploy/remote-release.sh
+
+      - name: Smoke test
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+            'curl -fsS --retry 5 --retry-delay 2 --retry-connrefused http://127.0.0.1:8089/health'

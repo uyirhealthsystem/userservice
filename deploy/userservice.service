@@ -1,0 +1,23 @@
+[Unit]
+Description=Uyir userservice
+After=network.target
+# If Postgres runs on the same box, also: After=postgresql.service
+
+[Service]
+Type=simple
+User=userservice
+WorkingDirectory=/opt/userservice/current
+EnvironmentFile=/opt/userservice/shared/userservice.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/server.js
+Restart=on-failure
+RestartSec=3
+# hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/userservice
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

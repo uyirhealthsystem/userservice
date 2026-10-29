@@ -1,0 +1,437 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// One row per patient who has created their profile. `id` is NOT generated
+// here - it is authservice's user id (the access token's `sub`), which the
+// gateway forwards as x-user-id. Every other service already stores that id,
+// so it is the one id for a patient across the platform.
+//
+// The row is created only when the patient submits their profile
+// (POST /api/v1/users/me) - never implicitly on some other request.
+// patientNo is the human-readable number (UYR-0000123) shown on cards.
+model User {
+  id        String     @id
+  patientNo Int        @unique @default(autoincrement())
+  status    UserStatus @default(ACTIVE)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  profile       PatientProfile?
+  familyMembers FamilyMember[]
+  conditions    MedicalCondition[]
+  allergies     Allergy[]
+  medications   Medication[]
+  vitals        VitalReading[]
+  abhaLinks     AbhaLink[]
+  nominee       Nominee?
+
+  @@map("users")
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+// Same shape as authservice's former patient_profiles table - the import
+// script copies rows across with their ids unchanged. gender / bloodGroup are
+// validated by the zod schemas, stored as strings.
+model PatientProfile {
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  fullName    String
+  dateOfBirth DateTime? @db.Date
+  gender      String?
+  phone       String?
+  bloodGroup  String?
+  address     String?
+  district    String?
+  pinCode     String? // 6-digit Indian PIN, kept as text (leading zeros / not arithmetic)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("patient_profiles")
+}
+
+// Family members a patient records under their own account (many per
+// patient). They are records, not accounts - they cannot log in. Ids are kept
+// from authservice on import: homebasedcare bookings reference them.
+model FamilyMember {
+  id           String    @id @default(uuid())
+  userId       String // the owning patient
+  fullName     String
+  relationship String
+  dateOfBirth  DateTime? @db.Date
+  gender       String?
+  phone        String?
+  bloodGroup   String?
+  district     String?
+  pinCode      String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conditions    MedicalCondition[]
+  allergies     Allergy[]
+  medications   Medication[]
+  vitals        VitalReading[]
+  healthRecords HealthRecord[]
+  abhaLinks     AbhaLink[]
+
+  @@index([userId])
+  @@map("family_members")
+}
+
+// ── Medical records ─────────────────────────────────────────────────────────
+// Every record belongs to an account (userId) and a subject: the patient
+// themself (familyMemberId null) or one of their family members. Deleting a
+// family member deletes their records.
+
+model MedicalCondition {
+  id             String    @id @default(uuid())
+  userId         String
+  familyMemberId String?
+  name           String
+  status         String // ACTIVE | RESOLVED
+  diagnosedOn    DateTime? @db.Date
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyMember FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: Cascade)
+
+  @@index([userId, familyMemberId])
+  @@map("medical_conditions")
+}
+
+model Allergy {
+  id             String   @id @default(uuid())
+  userId         String
+  familyMemberId String?
+  allergen       String
+  category       String // FOOD | DRUG | ENVIRONMENT | OTHER
+  severity       String? // MILD | MODERATE | SEVERE
+  reaction       String?
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyMember FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: Cascade)
+
+  @@index([userId, familyMemberId])
+  @@map("allergies")
+}
+
+model Medication {
+  id             String    @id @default(uuid())
+  userId         String
+  familyMemberId String?
+  name           String
+  dosage         String? // free text, e.g. "500 mg"
+  frequency      String? // free text, e.g. "twice daily after food"
+  startDate      DateTime? @db.Date
+  endDate        DateTime? @db.Date
+  prescribedBy   String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyMember FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: Cascade)
+
+  @@index([userId, familyMemberId])
+  @@map("medications")
+}
+
+// One measurement. `unit` is set by the service from `type` (see
+// medical.schemas.ts), not by the client. Blood pressure uses value =
+// systolic, secondaryValue = diastolic; every other type leaves it null.
+model VitalReading {
+  id             String   @id @default(uuid())
+  userId         String
+  familyMemberId String?
+  type           String // BLOOD_PRESSURE | HEART_RATE | BLOOD_SUGAR | SPO2 | TEMPERATURE | WEIGHT | HEIGHT
+  value          Float
+  secondaryValue Float?
+  unit           String
+  measuredAt     DateTime
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyMember FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: Cascade)
+
+  @@index([userId, familyMemberId, measuredAt])
+  @@map("vital_readings")
+}
+
+// Who read or changed which medical record, and when. Not a relation to
+// users on purpose - audit rows must outlive the records they describe.
+model AccessAudit {
+  id         String   @id @default(uuid())
+  ownerId    String // the patient account the data belongs to
+  actorId    String
+  actorRole  String
+  action     String // READ | CREATE | UPDATE | DELETE
+  resource   String // e.g. "conditions"
+  resourceId String?
+  requestId  String?
+  at         DateTime @default(now())
+
+  @@index([ownerId, at])
+  @@index([at]) // retention.ts
+  @@map("access_audit")
+}
+
+// ── Provider records ────────────────────────────────────────────────────────
+// Clinical records produced by the other services (lab reports, ECGs,
+// consultations, home-care visits...) and pushed here over Kafka
+// (health-records.events) or POST /internal/v1/health-records. See
+// docs/health-records.md for the producer contract.
+//
+// (source, sourceRecordId) is the producer's own key: re-sending it is
+// idempotent, and a higher sourceVersion replaces the stored copy. Producers
+// never delete - they send status ENTERED_IN_ERROR, which hides the record.
+//
+// userId is deliberately not a relation to users: a patient may use a
+// provider before creating their profile here, and their records must not be
+// lost - they show up once the profile exists. familyMemberId is checked
+// against the account on every write.
+model HealthRecord {
+  id               String   @id @default(uuid())
+  userId           String // account holder (authservice user id)
+  familyMemberId   String? // null = the account holder themself
+  source           String // LABSCAN | ECG | HOSPITAL | HOMEBASEDCARE | AMBULANCE
+  sourceRecordId   String
+  sourceVersion    Int
+  // Groups records of one visit/booking into one ABDM care context.
+  encounterId      String
+  recordType       String // DIAGNOSTIC_REPORT | PRESCRIPTION | OP_CONSULTATION | DISCHARGE_SUMMARY | IMMUNIZATION | WELLNESS | HEALTH_DOCUMENT
+  status           String // FINAL | AMENDED | ENTERED_IN_ERROR
+  title            String
+  summary          String?
+  recordedAt       DateTime // when the care happened, not when we received it
+  facilityName     String?
+  practitionerName String?
+  // Structured, type-specific details (observations, medicines...).
+  details          Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  familyMember FamilyMember?            @relation(fields: [familyMemberId], references: [id], onDelete: Cascade)
+  attachments  HealthRecordAttachment[]
+
+  @@unique([source, sourceRecordId])
+  @@index([userId, familyMemberId, recordedAt])
+  @@index([source, encounterId])
+  @@map("health_records")
+}
+
+// A file of a health record (report PDF, ECG trace, prescription scan). The
+// bytes are copied here: producers keep files on their own disks, which
+// neither the patient app nor an ABDM HIU can reach. Sent inline (HTTP) the
+// file is STORED at once; sent as a URL it is PENDING until the worker has
+// downloaded it. Replaced as a set when a newer record version arrives.
+// content is AES-256-GCM encrypted (lib/crypto.ts) when `encrypted`; size and
+// sha256 describe the plaintext file.
+model HealthRecordAttachment {
+  id             String   @id @default(uuid())
+  healthRecordId String
+  fileName       String
+  contentType    String
+  sourceUrl      String? // where the producer serves it (inside the private network)
+  content        Bytes?
+  encrypted      Boolean  @default(false)
+  size           Int?
+  sha256         String?
+  status         String   @default("PENDING") // PENDING | STORED | FAILED
+  attempts       Int      @default(0)
+  lastError      String?
+  nextAttemptAt  DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  healthRecord HealthRecord @relation(fields: [healthRecordId], references: [id], onDelete: Cascade)
+
+  @@index([healthRecordId])
+  @@index([status, nextAttemptAt])
+  @@map("health_record_attachments")
+}
+
+// Producer messages that could not be stored (bad shape, unknown family
+// member, subject change...). Kept so a bad message is visible to ops instead
+// of blocking the Kafka partition or vanishing.
+model HealthRecordRejection {
+  id             String   @id @default(uuid())
+  source         String?
+  sourceRecordId String?
+  channel        String // KAFKA | HTTP
+  reason         String
+  payload        Json?
+  at             DateTime @default(now())
+
+  @@index([at])
+  @@map("health_record_rejections")
+}
+
+// ── ABDM (we are a Health Information Provider) ─────────────────────────────
+
+// A verified ABHA for the account holder (subject "self") or a family member
+// (subject = their id). One per subject; an ABHA number belongs to one subject.
+model AbhaLink {
+  id               String    @id @default(uuid())
+  userId           String
+  subject          String // "self" | family member id
+  familyMemberId   String?
+  abhaNumber       String    @unique // 14 digits, no dashes
+  abhaAddress      String?
+  name             String?
+  gender           String? // M | F | O
+  yearOfBirth      Int?
+  verifiedAt       DateTime
+  // HIP-initiated linking: ABDM answers generate-token asynchronously; the
+  // request id is how its callback finds this row.
+  linkToken        String?
+  linkTokenAt      DateTime?
+  tokenRequestId   String?   @unique
+  tokenRequestedAt DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyMember FamilyMember?     @relation(fields: [familyMemberId], references: [id], onDelete: Cascade)
+  careContexts AbdmCareContext[]
+
+  @@unique([userId, subject])
+  @@map("abha_links")
+}
+
+// An ABHA OTP sent but not yet confirmed. One per subject; a new request
+// replaces it.
+model AbhaOtpVerification {
+  id         String   @id @default(uuid())
+  userId     String
+  subject    String // "self" | family member id
+  abhaNumber String
+  otpMethod  String // abdm | aadhaar
+  txnId      String
+  attempts   Int      @default(0)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, subject])
+  @@map("abha_otp_verifications")
+}
+
+// One care context = one encounter (source + encounterId) of a subject with
+// an ABHA, linked to that ABHA in ABDM so it shows in the patient's PHR app.
+model AbdmCareContext {
+  id            String    @id @default(uuid())
+  abhaLinkId    String
+  reference     String    @unique // "<SOURCE>-<encounterId>", our careContextReference
+  display       String
+  hiType        String // ABDM HI type, e.g. DiagnosticReport
+  status        String    @default("PENDING") // PENDING | REQUESTED | LINKED | FAILED
+  requestId     String? // REQUEST-ID of the link call (one call links many), matched by on_carecontext
+  attempts      Int       @default(0)
+  lastError     String?
+  nextAttemptAt DateTime  @default(now())
+  linkedAt      DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  abhaLink AbhaLink @relation(fields: [abhaLinkId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([requestId])
+  @@map("abdm_care_contexts")
+}
+
+// A consent artefact ABDM notified us about (consent/request/hip/notify).
+model AbdmConsent {
+  consentId    String    @id
+  status       String // GRANTED | REVOKED | EXPIRED | DENIED
+  patientId    String? // ABHA address
+  careContexts Json      @default("[]") // [{ patientReference, careContextReference }]
+  hiTypes      String[]
+  dateFrom     DateTime?
+  dateTo       DateTime?
+  dataEraseAt  DateTime?
+  artefact     Json // the notification as received
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("abdm_consents")
+}
+
+// A health-information request from an HIU (via ABDM), processed by the worker:
+// build FHIR bundles, encrypt for the HIU's key, push, notify ABDM.
+model AbdmDataRequest {
+  transactionId String    @id
+  consentId     String
+  request       Json // hiRequest as received (dataPushUrl, keyMaterial, dateRange)
+  status        String    @default("RECEIVED") // RECEIVED | PROCESSING | TRANSFERRED | FAILED
+  attempts      Int       @default(0)
+  lastError     String?
+  nextAttemptAt DateTime  @default(now())
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@map("abdm_data_requests")
+}
+
+// ── Privacy (DPDP Act 2023) ─────────────────────────────────────────────────
+
+// Consent the account holder gave, for themself (familyMemberId null) or for
+// a family member, to one purpose under one version of the privacy notice.
+// Withdrawing sets withdrawnAt; the row stays as proof of what was agreed
+// and when. Not a relation on purpose - it must outlive an erased account
+// (retention.ts removes it later).
+//   purpose: CARE (store and use health data to provide Uyir's services)
+//          | ABDM_SHARING (link an ABHA and share records through ABDM)
+//   basis:   SELF | MEMBER_CONSENTED (an adult member agreed)
+//          | PARENT_OR_GUARDIAN (a child, or an adult the holder is lawful guardian of)
+model PrivacyConsent {
+  id             String    @id @default(uuid())
+  userId         String
+  familyMemberId String?
+  purpose        String
+  noticeVersion  String
+  basis          String
+  grantedAt      DateTime  @default(now())
+  withdrawnAt    DateTime?
+  requestId      String?
+
+  @@index([userId, familyMemberId, purpose])
+  @@index([withdrawnAt])
+  @@map("privacy_consents")
+}
+
+// Whom the patient nominates to exercise their rights if they die or become
+// unable to (DPDP s.14). One per account.
+model Nominee {
+  userId       String   @id
+  fullName     String
+  relationship String
+  phone        String
+  email        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("nominees")
+}
