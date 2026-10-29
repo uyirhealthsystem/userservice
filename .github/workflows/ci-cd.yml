@@ -92,27 +92,35 @@ jobs:
           cp -r deploy release/deploy
 
       - name: Configure SSH
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
+          # Pasted secrets often carry a trailing newline/space - strip it.
+          host=$(printf '%s' "$EC2_HOST" | tr -d '[:space:]')
+          user=$(printf '%s' "$EC2_USER" | tr -d '[:space:]')
+          [[ "$host" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "::error::EC2_HOST must be a bare IP or hostname (e.g. 65.0.170.87) - no user@, http://, quotes or port"; exit 1; }
+          [[ "$user" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo "::error::EC2_USER must be a bare user name (e.g. ec2-user)"; exit 1; }
+          echo "TARGET=$user@$host" >> "$GITHUB_ENV"
+
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          printf '%s\n' "$EC2_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H "$host" >> ~/.ssh/known_hosts 2>/dev/null \
+            || { echo "::error::could not reach $host on port 22 - check the security group"; exit 1; }
 
       - name: Upload release to EC2
         run: |
           rsync -az --delete --mkpath \
             -e "ssh -i ~/.ssh/deploy_key" \
             release/ \
-            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/opt/userservice/releases/next/"
+            "$TARGET:/opt/userservice/releases/next/"
 
       - name: Activate release (migrate, install, restart)
-        run: |
-          ssh -i ~/.ssh/deploy_key \
-            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
-            'bash -s' < deploy/remote-release.sh
+        run: ssh -i ~/.ssh/deploy_key "$TARGET" 'bash -s' < deploy/remote-release.sh
 
       - name: Smoke test
         run: |
-          ssh -i ~/.ssh/deploy_key \
-            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+          ssh -i ~/.ssh/deploy_key "$TARGET" \
             'curl -fsS --retry 5 --retry-delay 2 --retry-connrefused http://127.0.0.1:8089/health'
