@@ -116,7 +116,33 @@ export function ageFromDob(dateOfBirth: Date | null, now = new Date()): number |
 // for them (booking forms etc. no longer need the app to type in name / age /
 // gender / phone). Shared only with the patient's CARE consent to the current
 // notice (DPDP), and every read is audited with the calling service as actor.
-export async function getUserForService(userId: string, source: string, requestId: string | null) {
+// Fields a service may ask for with ?fields=a,b,c - only those are returned
+// (DPDP data minimisation). user.id is always included so the caller can
+// correlate. Without ?fields the full { user, profile } is returned.
+export const SERVICE_USER_FIELDS = ["patientNumber", "status", "createdAt"] as const;
+export const SERVICE_PROFILE_FIELDS = [
+  "fullName",
+  "dateOfBirth",
+  "age",
+  "gender",
+  "phone",
+  "bloodGroup",
+  "address",
+  "district",
+  "pinCode",
+] as const;
+export type ServiceField = (typeof SERVICE_USER_FIELDS)[number] | (typeof SERVICE_PROFILE_FIELDS)[number];
+
+function pick(obj: object, keys: readonly string[]) {
+  return Object.fromEntries(Object.entries(obj).filter(([k]) => keys.includes(k)));
+}
+
+export async function getUserForService(
+  userId: string,
+  source: string,
+  requestId: string | null,
+  fields?: readonly ServiceField[],
+) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { ...userSelect, profile: { select: profileSelect } },
@@ -127,9 +153,12 @@ export async function getUserForService(userId: string, source: string, requestI
   await auditAccess({ ownerId: userId, actorId: source, actorRole: "SERVICE", action: "READ", resource: "profile", requestId });
 
   const { profile, ...rest } = user;
+  const fullUser = publicUser(rest);
+  const fullProfile = publicProfile(profile);
+  if (!fields) return { user: fullUser, profile: fullProfile };
   return {
-    user: publicUser(rest),
-    profile: publicProfile(profile),
+    user: { id: fullUser.id, ...pick(fullUser, SERVICE_USER_FIELDS.filter((f) => fields.includes(f))) },
+    profile: pick(fullProfile, SERVICE_PROFILE_FIELDS.filter((f) => fields.includes(f))),
   };
 }
 

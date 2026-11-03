@@ -28,6 +28,31 @@ describe("GET /internal/v1/users/:userId", () => {
     expect(audit).toMatchObject([{ actorId: "ECG", actorRole: "SERVICE", action: "READ" }]);
   });
 
+  it("?fields returns only the requested fields (plus user.id)", async () => {
+    const headers = await onboardedPatient();
+    const userId = headers["x-user-id"];
+
+    const res = await api.get(`${userUrl(userId)}?fields=fullName,age, gender,patientNumber`).set(asService());
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      user: { id: userId, patientNumber: expect.stringMatching(/^UYR-\d{7}$/) },
+      profile: { fullName: "Ravi Kumar", age: ageFromDob(new Date("1990-05-14")), gender: "MALE" },
+    });
+
+    const profileOnly = await api.get(`${userUrl(userId)}?fields=phone`).set(asService());
+    expect(profileOnly.status).toBe(200);
+    expect(profileOnly.body.user).toEqual({ id: userId });
+    expect(Object.keys(profileOnly.body.profile)).toEqual(["phone"]);
+  });
+
+  it("400 for an unknown or empty ?fields", async () => {
+    const headers = await onboardedPatient();
+    const url = userUrl(headers["x-user-id"]);
+    expect((await api.get(`${url}?fields=fullName,ssn`).set(asService())).status).toBe(400);
+    expect((await api.get(`${url}?fields=`).set(asService())).status).toBe(400);
+    expect((await api.get(`${url}?fields=id`).set(asService())).status).toBe(400);
+  });
+
   it("401 without a service token, with a wrong one, or with only the gateway secret", async () => {
     const headers = await onboardedPatient();
     const url = userUrl(headers["x-user-id"]);
