@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { ageFromDob } from "../src/modules/users/users.service";
 import { api, resetDb, asUser, newPatient, onboardedPatient, PROFILE, ONBOARDING } from "./helpers";
 
 const ME = "/api/v1/users/me";
@@ -80,8 +81,18 @@ describe("profile: GET / PUT /me/profile", () => {
     const headers = await onboardedPatient();
     const res = await api.put(PROFILE_PATH).set(headers).send({ fullName: "Ravi K" });
     expect(res.status).toBe(200);
-    expect(res.body.profile).toMatchObject({ fullName: "Ravi K", gender: null, bloodGroup: null });
+    expect(res.body.profile).toMatchObject({ fullName: "Ravi K", gender: null, bloodGroup: null, age: null });
     expect((await api.get(PROFILE_PATH).set(headers)).body.profile.fullName).toBe("Ravi K");
+  });
+
+  it("every own-profile response carries age from dateOfBirth", async () => {
+    const age = ageFromDob(new Date(PROFILE.dateOfBirth));
+    const headers = newPatient();
+    expect((await api.post(ME).set(headers).send(ONBOARDING)).body.profile.age).toBe(age);
+    expect((await api.get(ME).set(headers)).body.profile.age).toBe(age);
+    expect((await api.get(PROFILE_PATH).set(headers)).body.profile.age).toBe(age);
+    const put = await api.put(PROFILE_PATH).set(headers).send({ ...PROFILE, dateOfBirth: "1980-01-01" });
+    expect(put.body.profile.age).toBe(ageFromDob(new Date("1980-01-01")));
   });
 
   it("PUT before onboarding creates the profile (old create-or-replace clients)", async () => {

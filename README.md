@@ -45,7 +45,7 @@ All under `/api/v1/users`. Errors: `{ "error": { "code", "message" } }`.
 
 | Method | Path | |
 |---|---|---|
-| GET | `/me` | `{ user, profile, privacy }` |
+| GET | `/me` | `{ user, profile, privacy }` - every profile response also has `age` (whole years from `dateOfBirth`, `null` if unknown; read-only) |
 | POST | `/me` | onboarding (body = profile + `consent`; `fullName` and `consent` required) |
 | DELETE | `/me` | erase the account's data - body `{ "confirm": "DELETE_MY_DATA" }` |
 | GET / PUT | `/me/profile` | read / full replace (PUT before onboarding creates it, with `consent` - the old authservice behaviour) |
