@@ -1,9 +1,9 @@
-import { NextFunction, Request, Response, Router } from "express";
+import { Router } from "express";
 import express from "express";
 import { ZodError } from "zod";
 import { asyncHandler } from "../../lib/asyncHandler";
-import { AppError, Errors } from "../../lib/errors";
-import { serviceSource } from "../../middleware/gatewayIdentity";
+import { Errors } from "../../lib/errors";
+import { serviceAuth } from "../../middleware/gatewayIdentity";
 import { healthRecordInputSchema } from "./records.schemas";
 import { IngestRejected, ingestHealthRecord, recordRejection } from "./records.ingest";
 
@@ -16,14 +16,6 @@ export const internalRecordsRouter = Router();
 
 // Bigger than the app-wide JSON limit: attachments may come inline.
 const jsonWithFiles = express.json({ limit: "25mb" });
-
-function serviceAuth(req: Request, res: Response, next: NextFunction) {
-  const header = req.header("authorization") ?? "";
-  const source = header.startsWith("Bearer ") ? serviceSource(header.slice(7).trim()) : undefined;
-  if (!source) return next(new AppError(401, "NOT_AUTHENTICATED", "A valid service token is required."));
-  res.locals.source = source;
-  next();
-}
 
 internalRecordsRouter.post(
   "/health-records",

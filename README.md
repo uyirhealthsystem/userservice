@@ -61,6 +61,7 @@ All under `/api/v1/users`. Errors: `{ "error": { "code", "message" } }`.
 | GET | `/me/medical-history` | `?memberId=self\|<id>` - self-recorded + provider records in one view |
 | GET / POST / DELETE | `/me/abha`, `/me/abha/otp`, `/me/abha/verify`, `/me/abha/:id` | link an ABHA to self or a family member |
 | GET | `/family-members` | **internal**, for homebasedcare: `X-User-Id` + `Authorization: Bearer <its INTERNAL_SERVICE_TOKENS token>` (or the gateway secret); consented members only |
+| GET | `/internal/v1/users/:userId` | **internal**, any service: `Authorization: Bearer <its INTERNAL_SERVICE_TOKENS token>` (not via the gateway). `{ user, profile }` with `profile.age`; `404` not onboarded, `403 CONSENT_REQUIRED` without CARE consent; audited |
 | POST | `/internal/v1/health-records` | **internal**, producers only (per-service bearer token; not via the gateway) |
 | POST | `/abdm/api/v3/...` | ABDM bridge callbacks (ABDM-signed JWT) |
 
