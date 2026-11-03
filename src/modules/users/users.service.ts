@@ -4,6 +4,7 @@ import { prisma } from "../../lib/prisma";
 import { Errors } from "../../lib/errors";
 import { formatPatientNumber } from "../../lib/constants";
 import { env } from "../../lib/env";
+import { auditAccess } from "../../lib/audit";
 import { grantConsent, hasConsent, isMinor } from "../privacy/consent.service";
 import { selfConsentSchema } from "../privacy/privacy.schemas";
 import { profileSchema } from "./users.schemas";
@@ -91,6 +92,38 @@ export async function createMe(
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") throw Errors.profileExists();
     throw err;
   }
+}
+
+/** Whole years on `now` (UTC dates, like isMinor); null when unknown. */
+export function ageFromDob(dateOfBirth: Date | null, now = new Date()): number | null {
+  if (!dateOfBirth) return null;
+  let age = now.getUTCFullYear() - dateOfBirth.getUTCFullYear();
+  const beforeBirthday =
+    now.getUTCMonth() < dateOfBirth.getUTCMonth() ||
+    (now.getUTCMonth() === dateOfBirth.getUTCMonth() && now.getUTCDate() < dateOfBirth.getUTCDate());
+  if (beforeBirthday) age -= 1;
+  return age;
+}
+
+// Service-to-service: one patient by id, for a service that is about to care
+// for them (booking forms etc. no longer need the app to type in name / age /
+// gender / phone). Shared only with the patient's CARE consent to the current
+// notice (DPDP), and every read is audited with the calling service as actor.
+export async function getUserForService(userId: string, source: string, requestId: string | null) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { ...userSelect, profile: { select: profileSelect } },
+  });
+  if (!user?.profile) throw Errors.notFound("User");
+  if (!(await hasConsent(userId, "self", "CARE"))) throw Errors.consentRequired("CARE");
+
+  await auditAccess({ ownerId: userId, actorId: source, actorRole: "SERVICE", action: "READ", resource: "profile", requestId });
+
+  const { profile, ...rest } = user;
+  return {
+    user: publicUser(rest),
+    profile: { ...profile, age: ageFromDob(profile.dateOfBirth) },
+  };
 }
 
 export async function getProfile(userId: string) {

@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextFunction, Request, Response } from "express";
 import { env } from "../lib/env";
-import { Errors } from "../lib/errors";
+import { AppError, Errors } from "../lib/errors";
 import { PATIENT_ROLE } from "../lib/constants";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -27,6 +27,16 @@ export function serviceSource(presented: string): string | undefined {
 function bearerSource(req: Request): string | undefined {
   const header = req.header("authorization") ?? "";
   return header.startsWith("Bearer ") ? serviceSource(header.slice(7).trim()) : undefined;
+}
+
+// /internal/v1/* - other services only, by their own INTERNAL_SERVICE_TOKENS
+// bearer token (the gateway secret is NOT accepted: the gateway never
+// forwards here). The calling service ends up in res.locals.source.
+export function serviceAuth(req: Request, res: Response, next: NextFunction) {
+  const source = bearerSource(req);
+  if (!source) return next(new AppError(401, "NOT_AUTHENTICATED", "A valid service token is required."));
+  res.locals.source = source;
+  next();
 }
 
 // This service never sees the JWT itself. The gateway verifies it, strips any

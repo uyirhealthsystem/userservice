@@ -12,6 +12,7 @@ import { familyRouter, internalFamilyRouter } from "./modules/family/family.rout
 import { medicalRouter } from "./modules/medical/medical.routes";
 import { recordsRouter } from "./modules/records/records.routes";
 import { internalRecordsRouter } from "./modules/records/records.internal.routes";
+import { internalUsersRouter } from "./modules/users/users.internal.routes";
 import { abhaRouter } from "./modules/abdm/abha.routes";
 import { abdmCallbacksRouter } from "./modules/abdm/abdm.callbacks.routes";
 import { privacyRouter, requireConsent } from "./modules/privacy/privacy.routes";
@@ -26,6 +27,8 @@ app.use(pinoHttp({ logger }));
 // Producing services push health records here (service token, own body
 // limit) - ahead of the app-wide JSON parser.
 app.use(INTERNAL_API_PREFIX, internalRecordsRouter);
+// ...and read a patient by id (same service tokens).
+app.use(INTERNAL_API_PREFIX, internalUsersRouter);
 
 app.use(express.json({ limit: "1mb" }));
 
