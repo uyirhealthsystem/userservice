@@ -29,9 +29,16 @@ const profileSelect = {
 } as const;
 
 type UserRow = Prisma.UserGetPayload<{ select: typeof userSelect }>;
+type ProfileRow = Prisma.PatientProfileGetPayload<{ select: typeof profileSelect }>;
 
 function publicUser({ patientNo, ...user }: UserRow) {
   return { ...user, patientNumber: formatPatientNumber(patientNo) };
+}
+
+// Every profile we answer with carries `age` (whole years, from dateOfBirth;
+// null when unknown) - computed per request so it is never stale.
+function publicProfile(profile: ProfileRow) {
+  return { ...profile, age: ageFromDob(profile.dateOfBirth) };
 }
 
 // Omitted optional fields are cleared on a replace, not left as they were.
@@ -59,7 +66,7 @@ export async function getMe(userId: string) {
   const { profile, ...rest } = user;
   return {
     user: publicUser(rest),
-    profile,
+    profile: publicProfile(profile),
     // consentRequired: show the privacy notice (again - it may have changed).
     privacy: { noticeVersion: env.privacy.noticeVersion, consentRequired: !(await hasConsent(userId, "self", "CARE")) },
   };
@@ -84,7 +91,7 @@ export async function createMe(
       // anything is committed.
       const consentInput = { purpose: "CARE" as const, memberId: "self", noticeVersion: consent.noticeVersion };
       await grantConsent(userId, consentInput, requestId, tx, data.dateOfBirth ?? null);
-      return { user: publicUser(user), profile };
+      return { user: publicUser(user), profile: publicProfile(profile) };
     });
   } catch (err) {
     // userId is unique on patient_profiles - covers both "already onboarded"
@@ -122,14 +129,14 @@ export async function getUserForService(userId: string, source: string, requestI
   const { profile, ...rest } = user;
   return {
     user: publicUser(rest),
-    profile: { ...profile, age: ageFromDob(profile.dateOfBirth) },
+    profile: publicProfile(profile),
   };
 }
 
 export async function getProfile(userId: string) {
   const profile = await prisma.patientProfile.findUnique({ where: { userId }, select: profileSelect });
   if (!profile) throw Errors.profileRequired();
-  return profile;
+  return publicProfile(profile);
 }
 
 // Replace the profile. Before onboarding this creates it, exactly like
@@ -154,5 +161,5 @@ export async function replaceProfile(
     throw Errors.unprocessable("MINOR_ACCOUNT", "Under 18s cannot hold their own account - a parent adds them as a family member.");
   }
   const profile = await prisma.patientProfile.update({ where: { userId }, data: fullProfile(data), select: profileSelect });
-  return { profile, created: false };
+  return { profile: publicProfile(profile), created: false };
 }
