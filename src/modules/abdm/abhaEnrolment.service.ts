@@ -23,6 +23,7 @@ import {
   profileYear,
 } from "./abha.service";
 import { backfillCareContexts } from "./careContexts";
+import { qualifyReferral } from "../referrals/referrals.service";
 
 // ABHA creation for a patient who has none (docs/abha-creation.md). Optional
 // and separate from profile creation: nothing here runs unless the patient
@@ -206,6 +207,8 @@ export async function verifyAadhaar(userId: string, subject: string, otp: string
         },
         select: linkSelect,
       });
+      // Linked (new or existing ABHA alike): their Health Partner earns the referral.
+      await qualifyReferral(tx, userId, subject, abhaNumber);
       await tx.abhaEnrolment.update({
         where: { id: row.id },
         data:

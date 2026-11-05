@@ -100,9 +100,14 @@ const onboarding = folder(
       desc: "Nothing is stored without consent to the privacy notice (DPDP Act).",
       tests: errorCode(400, "VALIDATION_ERROR"),
     }),
+    req("Create profile with a too-long referral code (400)", "POST", `${U}/me`, {
+      body: { ...PROFILE, consent: CONSENT, referralCode: "X".repeat(31) },
+      desc: "`referralCode` is at most 30 characters. A code the Health Partner service doesn't know is `400 INVALID_REFERRAL_CODE` (needs HP_SERVICE_URL; see docs/referrals.md).",
+      tests: errorCode(400, "VALIDATION_ERROR"),
+    }),
     req("Create my profile (onboarding)", "POST", `${U}/me`, {
       body: { ...PROFILE, consent: CONSENT },
-      desc: "`201 { user: { id, status, createdAt, patientNumber }, profile }`. `fullName` and `consent` ({ noticeVersion, adultDeclaration: true }) are required. The user id is always the caller's - an `id` in the body is ignored.",
+      desc: "`201 { user: { id, status, createdAt, patientNumber }, profile }`. `fullName` and `consent` ({ noticeVersion, adultDeclaration: true }) are required. The user id is always the caller's - an `id` in the body is ignored.\n\nOptional `referralCode`: the Health Partner who brought the patient in. Checked with the HP service (`400 INVALID_REFERRAL_CODE` if it doesn't know it, so the patient can correct it; accepted unchecked if HP is down). The HP earns ₹10 once the patient links their own ABHA - docs/referrals.md.",
       tests: [
         ...status(201),
         `const j = pm.response.json();`,
@@ -128,6 +133,11 @@ const onboarding = folder(
       body: { fullName: "Ravi Kumar", dateOfBirth: "1990-05-14", gender: "MALE", bloodGroup: "O+", district: "Chennai", pinCode: "600040" },
       desc: "Full replace - optional fields left out (here `phone`, `address`) are cleared. Before onboarding a PUT creates the profile instead (`201`), like the old authservice endpoint.",
       tests: [...status(200), `pm.test("omitted field cleared", () => pm.expect(pm.response.json().profile.phone).to.eql(null));`],
+    }),
+    req("Replace profile with a referral code (400 REFERRAL_CODE_SIGNUP_ONLY)", "PUT", `${U}/me/profile`, {
+      body: { fullName: "Ravi Kumar", referralCode: "HPXXXXXXXX" },
+      desc: "A referral code can only be given when the profile is created.",
+      tests: errorCode(400, "REFERRAL_CODE_SIGNUP_ONLY"),
     }),
   ],
 );

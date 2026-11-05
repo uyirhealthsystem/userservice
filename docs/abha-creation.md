@@ -26,6 +26,9 @@ existing "link an ABHA you already have" flow (`/me/abha/otp`,
    exists, and we store it right away as an `AbhaLink` (`source: "CREATED"`).
    Care-context linking then starts. The mobile and address steps that follow
    only improve it. Abandoning them loses nothing.
+   If the patient signed up with a Health Partner's referral code, this link
+   (like the link flow's) earns that HP the referral -
+   [referrals.md](referrals.md).
 
 ## Flow
 

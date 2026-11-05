@@ -5,6 +5,7 @@ import { abdmEnabled } from "../../lib/env";
 import { assertConsent, consentedMember } from "../privacy/consent.service";
 import { AbdmProfile, OtpMethod, getProfile, requestLoginOtp, verifyLoginOtp } from "./abdm.client";
 import { backfillCareContexts } from "./careContexts";
+import { qualifyReferral } from "../referrals/referrals.service";
 
 // Links a verified ABHA to the patient or one of their family members. The
 // OTP goes to the ABHA holder's own mobile, so whoever links it controls that
@@ -98,7 +99,7 @@ export async function verifyAbhaOtp(userId: string, subject: string, otp: string
   try {
     const link = await prisma.$transaction(async (tx) => {
       await tx.abhaOtpVerification.delete({ where });
-      return tx.abhaLink.create({
+      const created = await tx.abhaLink.create({
         data: {
           userId,
           subject,
@@ -112,6 +113,9 @@ export async function verifyAbhaOtp(userId: string, subject: string, otp: string
         },
         select: linkSelect,
       });
+      // The patient's own ABHA, verified: their Health Partner earns the referral.
+      await qualifyReferral(tx, userId, subject, verifiedAbha);
+      return created;
     });
     await backfillCareContexts(link.id);
     return link;

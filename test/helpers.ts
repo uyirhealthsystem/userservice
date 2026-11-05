@@ -6,11 +6,12 @@ import { prisma } from "../src/lib/prisma";
 export const api = supertest(app);
 
 export async function resetDb() {
-  // health_records / rejections / ABDM consents and requests don't hang off
-  // users, so they are listed too.
+  // health_records / rejections / ABDM consents and requests / referrals
+  // don't hang off users, so they are listed too.
   await prisma.$executeRawUnsafe(
     'TRUNCATE TABLE "users", "access_audit", "health_records", "health_record_rejections", ' +
-      '"abha_otp_verifications", "abha_enrolments", "abdm_consents", "abdm_data_requests", "privacy_consents" RESTART IDENTITY CASCADE',
+      '"abha_otp_verifications", "abha_enrolments", "abdm_consents", "abdm_data_requests", "privacy_consents", ' +
+      '"patient_referrals", "rewarded_abhas" RESTART IDENTITY CASCADE',
   );
 }
 

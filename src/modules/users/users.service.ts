@@ -7,6 +7,7 @@ import { env } from "../../lib/env";
 import { auditAccess } from "../../lib/audit";
 import { grantConsent, hasConsent, isMinor } from "../privacy/consent.service";
 import { selfConsentSchema } from "../privacy/privacy.schemas";
+import { assertReferralCodeAccepted, recordReferral } from "../referrals/referrals.service";
 import { profileSchema } from "./users.schemas";
 
 // Every function here is scoped to the caller's own userId (x-user-id from
@@ -76,13 +77,17 @@ type SelfConsent = z.infer<typeof selfConsentSchema>;
 
 // Onboarding: the patient submits their profile and consent, and that creates
 // their user record (+ patient number) in one transaction. 409 if it already
-// exists.
+// exists. An optional Health Partner referral code is checked with the HP
+// service first (a wrong one is refused so it can be corrected) and kept with
+// the profile; the HP earns the reward once the patient links their ABHA.
 export async function createMe(
   userId: string,
   data: z.infer<typeof profileSchema>,
   consent: SelfConsent,
   requestId: string | null,
+  referralCode?: string,
 ) {
+  if (referralCode) await assertReferralCodeAccepted(userId, referralCode);
   try {
     return await prisma.$transaction(async (tx) => {
       const user = await tx.user.upsert({ where: { id: userId }, create: { id: userId }, update: {}, select: userSelect });
@@ -91,6 +96,7 @@ export async function createMe(
       // anything is committed.
       const consentInput = { purpose: "CARE" as const, memberId: "self", noticeVersion: consent.noticeVersion };
       await grantConsent(userId, consentInput, requestId, tx, data.dateOfBirth ?? null);
+      if (referralCode) await recordReferral(tx, userId, referralCode);
       return { user: publicUser(user), profile: publicProfile(profile) };
     });
   } catch (err) {
@@ -177,12 +183,16 @@ export async function replaceProfile(
   data: z.infer<typeof profileSchema>,
   consent: SelfConsent | undefined,
   requestId: string | null,
+  referralCode?: string,
 ) {
   const existing = await prisma.patientProfile.findUnique({ where: { userId }, select: { id: true } });
   if (!existing) {
     if (!consent) throw Errors.consentRequired("CARE");
-    const { profile } = await createMe(userId, data, consent, requestId);
+    const { profile } = await createMe(userId, data, consent, requestId, referralCode);
     return { profile, created: true };
+  }
+  if (referralCode) {
+    throw Errors.badRequest("REFERRAL_CODE_SIGNUP_ONLY", "A referral code can only be given when the profile is created.");
   }
   // A date of birth that makes the holder a minor can't stand next to their
   // own consent.

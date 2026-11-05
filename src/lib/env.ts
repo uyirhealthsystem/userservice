@@ -53,6 +53,15 @@ export const env = {
     workerIntervalMs: Number(optional("ABDM_WORKER_INTERVAL_MS", "5000")),
   },
 
+  // Health Partner service (docs/referrals.md): checks the referral code a
+  // patient gives at signup and pays the HP when the patient links their
+  // ABHA. Its /internal/v1 API, on the private network. Unset = codes are
+  // still accepted and kept, and sent once it is set.
+  hp: {
+    serviceUrl: (process.env.HP_SERVICE_URL ?? "").replace(/\/+$/, ""),
+    timeoutMs: Number(optional("HP_TIMEOUT_MS", "5000")),
+  },
+
   // DPDP Act: the privacy notice the patient consents to, and whom they
   // complain to. Bump PRIVACY_NOTICE_VERSION whenever the notice changes -
   // every patient is then asked to consent again.

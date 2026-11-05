@@ -32,7 +32,10 @@ Signup does not touch this service. After login the app calls:
    `consent: { noticeVersion, adultDeclaration: true }` → `201 { user, profile }`.
    Creates the user record (with `patientNumber`, e.g. `UYR-0000001`), the
    profile and the consent record in one transaction. `409 PROFILE_EXISTS` the
-   second time; `403 MINOR_ACCOUNT` for an under-18.
+   second time; `403 MINOR_ACCOUNT` for an under-18. Optional
+   `referralCode`: the Health Partner who brought the patient in; they earn the
+   referral once the patient links their own ABHA -
+   [docs/referrals.md](docs/referrals.md).
 
 Family members and medical records answer `404 PROFILE_REQUIRED` until then,
 and `403 CONSENT_REQUIRED` while the patient has not consented to the current
@@ -81,7 +84,7 @@ record shared with ABDM is written to `access_audit`.
 
 An in-process worker (`src/worker.ts`, every `ABDM_WORKER_INTERVAL_MS`)
 downloads attachments sent by URL, links care contexts in ABDM, runs ABDM
-data transfers, encrypts files stored before `DATA_ENCRYPTION_KEY` was set and,
+data transfers, tells the Health Partner service about referrals, encrypts files stored before `DATA_ENCRYPTION_KEY` was set and,
 hourly, deletes data past its retention window (docs/privacy.md). Jobs are rows claimed with `FOR UPDATE SKIP LOCKED`, so any
 number of replicas is safe. The Kafka consumer (`health-records.events`) starts
 when `KAFKA_BROKERS` is set.

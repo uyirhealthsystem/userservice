@@ -71,7 +71,10 @@ the patient signed up are theirs too.
 
 **Erasure** deletes the profile, family members, every medical and provider
 record with its files, ABHA links (with their care contexts), pending ABHA OTPs,
-ABHA creation in progress and the nominee. It keeps the `access_audit` rows and the (now withdrawn)
+ABHA creation in progress and the nominee. A Health Partner referral is
+cancelled at the HP service (or, if the patient had already linked their ABHA,
+still reported so the HP is paid) and then deleted; see
+[referrals.md](referrals.md). It keeps the `access_audit` rows and the (now withdrawn)
 consent rows, which hold no health data, as evidence until retention removes
 them. Records a producer sends after the erasure have no account, so they are
 treated as orphans (see below).
@@ -121,6 +124,15 @@ treated as orphans (see below).
   de-linking is not implemented.
 - **Significant Data Fiduciary duties** (DPO in India, DPIA, periodic audit)
   apply if the government notifies Uyir as one.
+
+## Health Partner referrals
+
+A referral code given at signup tells that Health Partner, through the HP
+service, when the patient joins and when they link their own ABHA. HP gets only
+the patient's user id. `rewarded_abhas` keeps a keyed hash of each ABHA that
+earned a reward - never the number, not tied to an account - so one ABHA earns
+one reward ever. The privacy notice should mention this. See
+[referrals.md](referrals.md).
 
 ## ABHA creation and Aadhaar
 

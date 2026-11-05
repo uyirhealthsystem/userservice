@@ -19,8 +19,9 @@ usersRouter.get(
 usersRouter.post(
   "/me",
   asyncHandler(async (req, res) => {
-    const { consent, ...profile } = onboardingSchema.parse(req.body);
-    res.status(201).json(await createMe(req.auth!.userId, profile, consent, requestId(req.header("x-request-id"))));
+    const { consent, referralCode, ...profile } = onboardingSchema.parse(req.body);
+    const rid = requestId(req.header("x-request-id"));
+    res.status(201).json(await createMe(req.auth!.userId, profile, consent, rid, referralCode));
   }),
 );
 
@@ -34,8 +35,9 @@ usersRouter.get(
 usersRouter.put(
   "/me/profile",
   asyncHandler(async (req, res) => {
-    const { consent, ...body } = replaceProfileSchema.parse(req.body);
-    const { profile, created } = await replaceProfile(req.auth!.userId, body, consent, requestId(req.header("x-request-id")));
+    const { consent, referralCode, ...body } = replaceProfileSchema.parse(req.body);
+    const rid = requestId(req.header("x-request-id"));
+    const { profile, created } = await replaceProfile(req.auth!.userId, body, consent, rid, referralCode);
     res.status(created ? 201 : 200).json({ profile });
   }),
 );

@@ -1,8 +1,9 @@
 import { prisma } from "./prisma";
 
 // The background work (fetching attachments, ABDM linking, ABDM data
-// transfers) is queued in ordinary tables with status + nextAttemptAt. A
-// worker claims due rows by pushing their nextAttemptAt out by a lease: with
+// transfers, Health Partner referrals) is queued in ordinary tables with
+// status + nextAttemptAt. A worker claims due rows by pushing their
+// nextAttemptAt out by a lease: with
 // SKIP LOCKED two replicas never claim the same row, and a row whose worker
 // died becomes due again when the lease runs out.
 
@@ -10,6 +11,7 @@ const QUEUES = {
   attachments: { table: "health_record_attachments", key: "id" },
   careContexts: { table: "abdm_care_contexts", key: "id" },
   dataRequests: { table: "abdm_data_requests", key: "transactionId" },
+  referrals: { table: "patient_referrals", key: "userId" },
 } as const;
 
 export async function claimDue(

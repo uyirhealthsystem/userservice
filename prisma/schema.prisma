@@ -468,3 +468,40 @@ model Nominee {
 
   @@map("nominees")
 }
+
+// ── Health Partner referrals (docs/referrals.md) ────────────────────────────
+
+// The Health Partner (HP) referral code a patient gave when creating their
+// profile. The HP service owns codes, referrals and rewards; this row is the
+// outbox that tells it what happened, retried by the worker until it answers:
+//   UNREGISTERED -> PENDING   (HP told: signed up with the code, no reward)
+//   -> QUALIFIED -> COMPLETED (patient's own ABHA linked; HP pays ₹10)
+//   CANCELLING -> INVALID     (HP told to cancel; `reason` says why)
+//   INVALID                   (HP refused the code, or the ABHA was rewarded before)
+// No relation to users on purpose: when the account is erased, a row HP must
+// still hear about (QUALIFIED / CANCELLING) outlives it, then is deleted.
+model PatientReferral {
+  userId        String    @id
+  code          String
+  status        String
+  reason        String?
+  qualifiedAt   DateTime?
+  attempts      Int       @default(0)
+  lastError     String?
+  nextAttemptAt DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@map("patient_referrals")
+}
+
+// ABHAs that have earned a referral reward - a keyed hash, not the number -
+// so one ABHA earns one reward ever, also after it is unlinked or the
+// account is erased and the ABHA linked again elsewhere.
+model RewardedAbha {
+  abhaHash  String   @id
+  createdAt DateTime @default(now())
+
+  @@map("rewarded_abhas")
+}
