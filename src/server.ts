@@ -12,9 +12,6 @@ const server = app.listen(env.port, () => {
 if (!env.gatewaySecret) {
   logger.warn("GATEWAY_SECRET is not set - x-user-id / x-user-role are trusted from any caller (development only)");
 }
-if (env.serviceTokens.size === 0) {
-  logger.warn("INTERNAL_SERVICE_TOKENS is not set - POST /internal/v1/health-records accepts no producer");
-}
 if (!abdmEnabled()) {
   logger.warn("ABDM_CLIENT_ID / ABDM_CLIENT_SECRET / ABDM_HIP_ID not set - ABHA linking and ABDM sharing are off");
 }

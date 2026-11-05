@@ -22,7 +22,7 @@ export type IngestOutcome = "created" | "updated" | "unchanged";
 // The message is well-formed but can't be stored. Not retried.
 export class IngestRejected extends Error {
   constructor(
-    public code: "UNKNOWN_FAMILY_MEMBER" | "SUBJECT_CHANGED" | "SOURCE_MISMATCH" | "INVALID",
+    public code: "UNKNOWN_FAMILY_MEMBER" | "SUBJECT_CHANGED" | "INVALID",
     message: string,
   ) {
     super(message);

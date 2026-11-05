@@ -47,12 +47,6 @@ export async function addFamilyMember(headers: Record<string, string>, body: obj
   return res.body.familyMember.id as string;
 }
 
-// Producer bearer tokens, as configured in test/setupEnv.ts.
-export const SERVICE_TOKENS = {
-  LABSCAN: "labscan-test-token-labscan-test-token-0001",
-  ECG: "ecg-test-token-ecg-test-token-ecg-test-0001",
-};
-
 /** A valid producer payload for the patient behind `headers`. */
 export function labReport(headers: Record<string, string>, overrides: Record<string, unknown> = {}) {
   return {
@@ -71,8 +65,8 @@ export function labReport(headers: Record<string, string>, overrides: Record<str
   };
 }
 
-export function pushRecord(body: object, token = SERVICE_TOKENS.LABSCAN) {
-  return api.post("/internal/v1/health-records").set("authorization", `Bearer ${token}`).send(body);
+export function pushRecord(body: object) {
+  return api.post("/internal/v1/health-records").send(body);
 }
 
 /** Consent to linking an ABHA / sharing through ABDM, for self or a member. */

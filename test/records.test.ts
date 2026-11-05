@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { api, resetDb, newPatient, onboardedPatient, addFamilyMember, labReport, pushRecord, SERVICE_TOKENS, CONSENT } from "./helpers";
+import { api, resetDb, newPatient, onboardedPatient, addFamilyMember, labReport, pushRecord, CONSENT } from "./helpers";
 import { prisma } from "../src/lib/prisma";
 import { handleHealthRecordMessage } from "../src/modules/records/records.consumer";
 import { fetchPendingAttachments } from "../src/modules/records/attachments.fetcher";
@@ -10,14 +10,10 @@ const HISTORY = "/api/v1/users/me/medical-history";
 describe("health record ingestion (internal)", () => {
   beforeEach(resetDb);
 
-  it("needs a producer token, and a token only writes its own source", async () => {
+  it("needs no token - the record's own source names the producer", async () => {
     const headers = await onboardedPatient();
-    expect((await api.post("/internal/v1/health-records").send(labReport(headers))).status).toBe(401);
-    expect((await pushRecord(labReport(headers), "x".repeat(40))).status).toBe(401);
-
-    const wrongSource = await pushRecord(labReport(headers), SERVICE_TOKENS.ECG);
-    expect(wrongSource.status).toBe(422);
-    expect(wrongSource.body.error.code).toBe("SOURCE_MISMATCH");
+    expect((await pushRecord(labReport(headers))).status).toBe(201);
+    expect((await pushRecord(labReport(headers, { source: "ECG" }))).status).toBe(201);
   });
 
   it("is not reachable under the gateway-forwarded prefix", async () => {

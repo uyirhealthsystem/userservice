@@ -28,18 +28,16 @@ Pick one channel. Both run the same code and give the same result.
 Kafka messages are too small for files: send attachments as `url`.
 
 **HTTP**: `POST http://userservice:8089/internal/v1/health-records` with
-`Authorization: Bearer <your token>` and the record as the body. The token is
-your entry in userservice's `INTERNAL_SERVICE_TOKENS`
-(`labscan:<token>,...`), and it can only write records with your own
-`source`. This path is not reachable through the api-gateway.
+the record as the body. No token is needed: the record's `source` says which
+producer sent it. This path is not reachable through the api-gateway, so only
+the private network keeps other callers out.
 
 | Answer | Meaning | Retry? |
 |---|---|---|
 | 201 `{ outcome: "created", recordId }` | stored | - |
 | 200 `{ outcome: "updated" \| "unchanged", recordId }` | newer version stored / already had this or a newer one | - |
 | 400 `VALIDATION_ERROR` | payload breaks the contract | no, fix the producer |
-| 422 `UNKNOWN_FAMILY_MEMBER` / `SUBJECT_CHANGED` / `SOURCE_MISMATCH` | see below | no |
-| 401 | token missing or wrong | no |
+| 422 `UNKNOWN_FAMILY_MEMBER` / `SUBJECT_CHANGED` | see below | no |
 | 5xx / no answer | userservice or its DB is down | **yes**, with backoff |
 
 On Kafka the same rejections are logged to `health_record_rejections` and the

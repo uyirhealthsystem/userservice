@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import pino from "pino";
 import { redact } from "../src/lib/logger";
-import { api, resetDb, newPatient, onboardedPatient, SERVICE_TOKENS, MEMBER_CONSENT } from "./helpers";
+import { api, resetDb, newPatient, onboardedPatient, MEMBER_CONSENT } from "./helpers";
 
 const FAMILY = "/api/v1/users/me/family-members";
 const INTERNAL = "/api/v1/users/family-members";
@@ -52,14 +52,13 @@ describe("family members", () => {
   });
 });
 
-// homebasedcare's AuthServiceFamilyMembers: GET with X-User-Id and its
-// service token.
+// homebasedcare's AuthServiceFamilyMembers: GET with X-User-Id, no token.
 describe("internal GET /family-members", () => {
   beforeEach(resetDb);
 
-  const asService = (userId: string) => ({ "X-User-Id": userId, Authorization: `Bearer ${SERVICE_TOKENS.LABSCAN}` });
+  const asService = (userId: string) => ({ "X-User-Id": userId });
 
-  it("returns the user's members to a service token", async () => {
+  it("returns the user's members with only X-User-Id", async () => {
     const headers = await onboardedPatient();
     await api.post(FAMILY).set(headers).send(MEMBER);
 
@@ -83,20 +82,9 @@ describe("internal GET /family-members", () => {
     expect(res.body.familyMembers).toEqual([]);
   });
 
-  it("401 with only X-User-Id (no service token, no gateway secret)", async () => {
-    const headers = await onboardedPatient();
-    await api.post(FAMILY).set(headers).send(MEMBER);
-
-    expect((await api.get(INTERNAL).set({ "X-User-Id": headers["x-user-id"] })).status).toBe(401);
-  });
-
-  it("401 with an unknown service token", async () => {
-    const res = await api.get(INTERNAL).set({ "X-User-Id": crypto.randomUUID(), Authorization: `Bearer ${"x".repeat(48)}` });
-    expect(res.status).toBe(401);
-  });
-
-  it("401 without X-User-Id", async () => {
-    expect((await api.get(INTERNAL).set({ Authorization: `Bearer ${SERVICE_TOKENS.LABSCAN}` })).status).toBe(401);
+  it("401 without a valid X-User-Id", async () => {
+    expect((await api.get(INTERNAL)).status).toBe(401);
+    expect((await api.get(INTERNAL).set({ "X-User-Id": "not-a-uuid" })).status).toBe(401);
   });
 });
 

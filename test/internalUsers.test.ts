@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import { describe, it, expect, beforeEach } from "vitest";
 import { prisma } from "../src/lib/prisma";
 import { ageFromDob } from "../src/modules/users/users.service";
-import { api, resetDb, newPatient, onboardedPatient, SERVICE_TOKENS } from "./helpers";
+import { api, resetDb, newPatient, onboardedPatient } from "./helpers";
 
 const userUrl = (id: string) => `/internal/v1/users/${id}`;
-const asService = (token = SERVICE_TOKENS.ECG) => ({ authorization: `Bearer ${token}` });
+const asService = (name = "ecg") => ({ "x-service-name": name });
 
 describe("GET /internal/v1/users/:userId", () => {
   beforeEach(resetDb);
@@ -53,12 +53,14 @@ describe("GET /internal/v1/users/:userId", () => {
     expect((await api.get(`${url}?fields=id`).set(asService())).status).toBe(400);
   });
 
-  it("401 without a service token, with a wrong one, or with only the gateway secret", async () => {
+  it("needs no token; a caller without a valid X-Service-Name is audited as UNKNOWN", async () => {
     const headers = await onboardedPatient();
-    const url = userUrl(headers["x-user-id"]);
-    expect((await api.get(url)).status).toBe(401);
-    expect((await api.get(url).set(asService("wrong"))).status).toBe(401);
-    expect((await api.get(url).set(headers)).status).toBe(401);
+    const userId = headers["x-user-id"];
+    expect((await api.get(userUrl(userId))).status).toBe(200);
+    expect((await api.get(userUrl(userId)).set(asService("bad name!"))).status).toBe(200);
+
+    const audit = await prisma.accessAudit.findMany({ where: { ownerId: userId, resource: "profile" } });
+    expect(audit.map((a) => a.actorId)).toEqual(["UNKNOWN", "UNKNOWN"]);
   });
 
   it("not reachable through the gateway prefix", async () => {

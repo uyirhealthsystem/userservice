@@ -775,44 +775,7 @@
           }
         },
         {
-          "name": "List family members (internal, X-User-Id only - 401)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 401\", () => pm.response.to.have.status(401));",
-                  "pm.test(\"error NOT_AUTHENTICATED\", () => pm.expect(pm.response.json().error.code).to.eql(\"NOT_AUTHENTICATED\"));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/family-members",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "family-members"
-              ]
-            },
-            "description": "Without a service token (or the gateway secret) anyone on the network could read any patient's family."
-          }
-        },
-        {
-          "name": "List family members (internal, service token)",
+          "name": "List family members (internal)",
           "event": [
             {
               "listen": "test",
@@ -831,10 +794,6 @@
               {
                 "key": "X-User-Id",
                 "value": "{{userId}}"
-              },
-              {
-                "key": "authorization",
-                "value": "Bearer {{labscanToken}}"
               }
             ],
             "url": {
@@ -849,7 +808,7 @@
                 "family-members"
               ]
             },
-            "description": "Service-to-service read used by homebasedcare while it creates a FAMILY_MEMBER booking: `X-User-Id` + the service's `INTERNAL_SERVICE_TOKENS` bearer token. Only members with consent are returned. A patient who never onboarded gets `[]`."
+            "description": "Service-to-service read used by homebasedcare while it creates a FAMILY_MEMBER booking: `X-User-Id` only, no token. Only members with consent are returned. A patient who never onboarded gets `[]`."
           }
         }
       ]
@@ -1681,7 +1640,7 @@
     },
     {
       "name": "Health records",
-      "description": "Records other services push (see `docs/health-records.md`), and the patient's combined medical history.\n\nThe producer requests send `Authorization: Bearer {{labscanToken}}` - the `labscan:` entry of `INTERNAL_SERVICE_TOKENS` in userservice/.env.",
+      "description": "Records other services push (see `docs/health-records.md`), and the patient's combined medical history.\n\nProducer requests need no token; the record's `source` names the producer.",
       "item": [
         {
           "name": "Push lab report (as labscan)",
@@ -1710,8 +1669,8 @@
             "method": "POST",
             "header": [
               {
-                "key": "authorization",
-                "value": "Bearer {{labscanToken}}"
+                "key": "X-Service-Name",
+                "value": "labscan"
               }
             ],
             "url": {
@@ -1755,8 +1714,8 @@
             "method": "POST",
             "header": [
               {
-                "key": "authorization",
-                "value": "Bearer {{labscanToken}}"
+                "key": "X-Service-Name",
+                "value": "labscan"
               }
             ],
             "url": {
@@ -1780,45 +1739,6 @@
               }
             },
             "description": "Same `sourceVersion` - ignored, so re-delivery is harmless. A higher version replaces the record."
-          }
-        },
-        {
-          "name": "Push without a token (401)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 401\", () => pm.response.to.have.status(401));",
-                  "pm.test(\"error NOT_AUTHENTICATED\", () => pm.expect(pm.response.json().error.code).to.eql(\"NOT_AUTHENTICATED\"));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/internal/v1/health-records",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "internal",
-                "v1",
-                "health-records"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"source\": \"LABSCAN\",\n  \"sourceRecordId\": \"{{sourceRecordId}}\",\n  \"sourceVersion\": 1,\n  \"encounterId\": \"{{sourceRecordId}}-appt\",\n  \"patient\": {\n    \"userId\": \"{{userId}}\"\n  },\n  \"recordType\": \"DIAGNOSTIC_REPORT\",\n  \"title\": \"Complete blood count\",\n  \"summary\": \"Haemoglobin 10.2 g/dL (low).\",\n  \"recordedAt\": \"2026-10-01T09:30:00+05:30\",\n  \"facilityName\": \"Uyir Labs, Madurai\",\n  \"attachments\": [\n    {\n      \"fileName\": \"cbc.txt\",\n      \"contentType\": \"text/plain\",\n      \"contentBase64\": \"Q0JDIHJlcG9ydA==\"\n    }\n  ]\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
           }
         },
         {
@@ -3204,10 +3124,6 @@
     },
     {
       "key": "gatewaySecret",
-      "value": ""
-    },
-    {
-      "key": "labscanToken",
       "value": ""
     },
     {
