@@ -129,25 +129,36 @@ export function referralForExport(userId: string) {
 
 const DUE: ReferralStatus[] = ["UNREGISTERED", "QUALIFIED", "CANCELLING"];
 const BATCH = 20;
-const LEASE_SECONDS = 60;
+
+// The batch is sent in parallel, so a round takes about one HP call however
+// slow HP is (each call is cut off at HP_TIMEOUT_MS) - it never holds up the
+// worker's other steps (ABDM linking, data transfers) for BATCH timeouts.
+// The lease outlasts such a round with room to spare, so another replica
+// doesn't pick the same rows up mid-flight.
+const leaseSeconds = () => Math.max(60, Math.ceil((env.hp.timeoutMs * 4) / 1000));
 
 /** Sends what HP has not heard yet. Does nothing until HP_SERVICE_URL is set. */
 export async function processReferrals() {
   if (!hpConfigured()) return;
-  for (const userId of await claimDue("referrals", DUE, BATCH, LEASE_SECONDS)) {
-    const referral = await prisma.patientReferral.findUnique({ where: { userId } });
-    if (!referral || !DUE.includes(referral.status as ReferralStatus)) continue;
-    try {
-      await deliver(referral);
-    } catch (err) {
-      if (!(err instanceof HpUnavailable)) logger.error({ err, userId }, "referral delivery failed");
-      const attempts = referral.attempts + 1;
-      // Only if nothing moved the row on meanwhile (e.g. qualified while we registered).
-      await prisma.patientReferral.updateMany({
+  const due = await claimDue("referrals", DUE, BATCH, leaseSeconds());
+  await Promise.all(due.map(deliverOne));
+}
+
+async function deliverOne(userId: string) {
+  const referral = await prisma.patientReferral.findUnique({ where: { userId } });
+  if (!referral || !DUE.includes(referral.status as ReferralStatus)) return;
+  try {
+    await deliver(referral);
+  } catch (err) {
+    if (!(err instanceof HpUnavailable)) logger.error({ err, userId }, "referral delivery failed");
+    const attempts = referral.attempts + 1;
+    // Only if nothing moved the row on meanwhile (e.g. qualified while we registered).
+    await prisma.patientReferral
+      .updateMany({
         where: { userId, status: referral.status },
         data: { attempts, lastError: (err as Error).message.slice(0, 500), nextAttemptAt: backoff(attempts) },
-      });
-    }
+      })
+      .catch((dbErr) => logger.error({ err: dbErr, userId }, "referral retry not recorded; retried when the lease ends"));
   }
 }
 

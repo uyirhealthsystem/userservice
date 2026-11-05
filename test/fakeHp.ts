@@ -18,7 +18,7 @@ export function installFakeHp(codes: Record<string, string> = { HPRAVI001: "hp-u
   const referrals = new Map<string, FakeReferral>(); // by referred user id
   const wallet: Record<string, number> = {}; // by code
   const calls: { method: string; path: string; body: any }[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
-  const state = { down: false };
+  const state = { down: false, delayMs: 0 }; // delayMs: a slow HP (honours the caller's timeout)
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   const fail = (status: number, code: string) => json({ code, message: code }, status);
 
@@ -36,6 +36,16 @@ export function installFakeHp(codes: Record<string, string> = { HPRAVI001: "hp-u
     const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
     calls.push({ method: init?.method ?? "GET", path: url.pathname, body });
     if (state.down) throw new Error("connect ECONNREFUSED");
+    if (state.delayMs) {
+      const signal = init?.signal;
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, state.delayMs);
+        signal?.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(signal.reason);
+        });
+      });
+    }
 
     const codeCheck = url.pathname.match(/^\/internal\/v1\/referral-codes\/(.+)$/);
     if (codeCheck) {

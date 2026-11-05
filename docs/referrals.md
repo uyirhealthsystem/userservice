@@ -70,7 +70,11 @@ The code and its status are in the data export (`GET /me/export` → `referral`)
 
 `patient_referrals` is an outbox, one row per patient, retried by the worker
 (`src/worker.ts`, every `ABDM_WORKER_INTERVAL_MS`, exponential backoff up to
-an hour, forever):
+an hour, forever). Up to 20 rows a round (about 3.4 lakh a day per replica at
+the default 5 s), sent to HP in parallel: a slow HP holds a round for one
+`HP_TIMEOUT_MS`, not one per row, so it never stalls the worker's ABDM steps.
+Rows are claimed with `SKIP LOCKED` under a lease of at least 4 × the timeout,
+so any number of replicas is safe:
 
 | `status` | Meaning | Worker |
 |---|---|---|
@@ -118,5 +122,5 @@ Health Partner when the patient joins and links an ABHA; bump
 
 ## Tests
 
-- `test/referrals.test.ts` - 21 cases against `test/fakeHp.ts` (and the fake ABDM).
+- `test/referrals.test.ts` - 22 cases against `test/fakeHp.ts` (and the fake ABDM).
 - HP: Postman collection folder *4. Referrals* and *7. Validation Checks*.

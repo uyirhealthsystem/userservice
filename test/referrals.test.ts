@@ -130,6 +130,30 @@ describe("referral code at signup", () => {
     expect(await referralOf(headers)).toMatchObject({ status: "PENDING", attempts: 0, lastError: null });
   });
 
+  it("a slow HP holds a worker round for one timeout, not one per referral", async () => {
+    hp.state.down = true;
+    const patients = [];
+    for (let i = 0; i < 8; i++) patients.push(await referredPatient());
+    hp.state.down = false;
+    hp.state.delayMs = 5_000;
+    const savedTimeout = env.hp.timeoutMs;
+    env.hp.timeoutMs = 300;
+    try {
+      const started = Date.now();
+      await deliver();
+      // One after another this would be 8 x 300 ms.
+      expect(Date.now() - started).toBeLessThan(1_500);
+      for (const p of patients) expect(await referralOf(p)).toMatchObject({ status: "UNREGISTERED", attempts: 1 });
+
+      // HP fast again: the whole batch goes through in one round.
+      hp.state.delayMs = 0;
+      await deliver();
+      for (const p of patients) expect(await referralOf(p)).toMatchObject({ status: "PENDING" });
+    } finally {
+      env.hp.timeoutMs = savedTimeout;
+    }
+  });
+
   it("HP not configured: code kept, sent once it is configured", async () => {
     env.hp.serviceUrl = "";
     const headers = await referredPatient("ANYCODE");
