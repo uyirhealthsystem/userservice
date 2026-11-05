@@ -12,9 +12,6 @@ process.env.NODE_ENV = "test";
 process.env.LOG_LEVEL ??= "silent";
 // The suite plays the gateway: it sends this as x-gateway-secret.
 process.env.GATEWAY_SECRET ??= "test-gateway-secret-test-gateway-secret";
-// ...and the producing services (test/helpers.ts SERVICE_TOKENS).
-process.env.INTERNAL_SERVICE_TOKENS ??=
-  "labscan:labscan-test-token-labscan-test-token-0001,ecg:ecg-test-token-ecg-test-token-ecg-test-0001";
 // ...and ABDM (test/fakeAbdm.ts answers on these hosts). Callback signatures
 // are switched on per test.
 process.env.ABDM_GATEWAY_URL = "https://abdm.test";

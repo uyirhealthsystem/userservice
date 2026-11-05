@@ -95,7 +95,8 @@ treated as orphans (see below).
 - Credentials are redacted from logs. There is no CORS here (the gateway owns
   it).
 - Identity headers are trusted only with the gateway secret. Service-to-service
-  routes need a per-service token.
+  routes (`/internal/v1/*`, `GET /api/v1/users/family-members`) take no token:
+  only the private network keeps other callers away from patient data.
 - Every access to medical data is audited, and an access that cannot be audited
   fails.
 

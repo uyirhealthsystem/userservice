@@ -11,7 +11,6 @@ import {
   CONSENT,
   MEMBER_CONSENT,
   ONBOARDING,
-  SERVICE_TOKENS,
 } from "./helpers";
 import { prisma } from "../src/lib/prisma";
 import { env } from "../src/lib/env";
@@ -153,13 +152,13 @@ describe("family members", () => {
     const direct = await api.get(`${CONDITIONS}?memberId=${member.id}`).set(headers);
     expect(direct.status).toBe(403);
     expect(direct.body.error.code).toBe("CONSENT_REQUIRED");
-    const internal = await api.get(INTERNAL_FAMILY).set({ "X-User-Id": userId, Authorization: `Bearer ${SERVICE_TOKENS.LABSCAN}` });
+    const internal = await api.get(INTERNAL_FAMILY).set({ "X-User-Id": userId });
     expect(internal.body.familyMembers).toHaveLength(0);
 
     await api.post(CONSENTS).set(headers).send({ purpose: "CARE", memberId: member.id, ...MEMBER_CONSENT });
     expect((await api.get(CONDITIONS).set(headers)).body.conditions).toHaveLength(1);
     expect((await api.get(RECORDS).set(headers)).body.healthRecords).toHaveLength(1);
-    const after = await api.get(INTERNAL_FAMILY).set({ "X-User-Id": userId, Authorization: `Bearer ${SERVICE_TOKENS.LABSCAN}` });
+    const after = await api.get(INTERNAL_FAMILY).set({ "X-User-Id": userId });
     expect(after.body.familyMembers).toHaveLength(1);
   });
 });

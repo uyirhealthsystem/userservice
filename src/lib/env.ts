@@ -25,11 +25,6 @@ export const env = {
   // service can be run and tested without the gateway.
   gatewaySecret: process.env.GATEWAY_SECRET || undefined,
 
-  // Producers of health records (labscan, ecg, ...) authenticate to
-  // POST /internal/v1/health-records with their own token:
-  // "labscan:<token>,ecg:<token>". A token only writes records of its source.
-  serviceTokens: parseServiceTokens(process.env.INTERNAL_SERVICE_TOKENS ?? ""),
-
   // Unset = no Kafka consumer (records then arrive over HTTP only).
   kafka: {
     brokers: (process.env.KAFKA_BROKERS ?? "").split(",").map((b) => b.trim()).filter(Boolean),
@@ -90,18 +85,6 @@ export const env = {
 export const isProduction = env.nodeEnv === "production";
 
 export const abdmEnabled = () => Boolean(env.abdm.clientId && env.abdm.clientSecret && env.abdm.hipId);
-
-function parseServiceTokens(raw: string): Map<string, string> {
-  const tokens = new Map<string, string>(); // token -> source
-  for (const pair of raw.split(",").map((p) => p.trim()).filter(Boolean)) {
-    const at = pair.indexOf(":");
-    const source = pair.slice(0, at).trim().toUpperCase();
-    const token = pair.slice(at + 1).trim();
-    if (at < 1 || token.length < 32) throw new Error(`INTERNAL_SERVICE_TOKENS: "${source || pair}" needs "<source>:<token of 32+ chars>"`);
-    tokens.set(token, source);
-  }
-  return tokens;
-}
 
 function parseKey(raw: string | undefined): Buffer | undefined {
   if (!raw) return undefined;

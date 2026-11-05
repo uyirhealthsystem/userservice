@@ -75,7 +75,7 @@ const PROFILE = {
 const CONSENT = { noticeVersion: "1", adultDeclaration: true };
 const MEMBER_CONSENT = { noticeVersion: "1", basis: "MEMBER_CONSENTED" };
 
-const PRODUCER = [{ key: "authorization", value: "Bearer {{labscanToken}}" }];
+const PRODUCER = [{ key: "X-Service-Name", value: "labscan" }];
 
 const onboarding = folder(
   "Onboarding & profile",
@@ -156,14 +156,9 @@ const family = folder(
       desc: "Any subset of the create fields.",
       tests: status(200),
     }),
-    req("List family members (internal, X-User-Id only - 401)", "GET", `${U}/family-members`, {
+    req("List family members (internal)", "GET", `${U}/family-members`, {
       headers: [{ key: "X-User-Id", value: "{{userId}}" }],
-      desc: "Without a service token (or the gateway secret) anyone on the network could read any patient's family.",
-      tests: errorCode(401, "NOT_AUTHENTICATED"),
-    }),
-    req("List family members (internal, service token)", "GET", `${U}/family-members`, {
-      headers: [{ key: "X-User-Id", value: "{{userId}}" }, ...PRODUCER],
-      desc: "Service-to-service read used by homebasedcare while it creates a FAMILY_MEMBER booking: `X-User-Id` + the service's `INTERNAL_SERVICE_TOKENS` bearer token. Only members with consent are returned. A patient who never onboarded gets `[]`.",
+      desc: "Service-to-service read used by homebasedcare while it creates a FAMILY_MEMBER booking: `X-User-Id` only, no token. Only members with consent are returned. A patient who never onboarded gets `[]`.",
       tests: [...status(200), `pm.test("one member", () => pm.expect(pm.response.json().familyMembers).to.have.length(1));`],
     }),
   ],
@@ -256,7 +251,7 @@ const healthRecords = folder(
   [
     "Records other services push (see `docs/health-records.md`), and the patient's combined medical history.",
     "",
-    "The producer requests send `Authorization: Bearer {{labscanToken}}` - the `labscan:` entry of `INTERNAL_SERVICE_TOKENS` in userservice/.env.",
+    "Producer requests need no token; the record's `source` names the producer.",
   ].join("\n"),
   [
     req("Push lab report (as labscan)", "POST", "/internal/v1/health-records", {
@@ -271,11 +266,6 @@ const healthRecords = folder(
       body: LAB_REPORT,
       desc: "Same `sourceVersion` - ignored, so re-delivery is harmless. A higher version replaces the record.",
       tests: [...status(200), `pm.test("unchanged", () => pm.expect(pm.response.json().outcome).to.eql("unchanged"));`],
-    }),
-    req("Push without a token (401)", "POST", "/internal/v1/health-records", {
-      headers: [],
-      body: LAB_REPORT,
-      tests: errorCode(401, "NOT_AUTHENTICATED"),
     }),
     req("List my health records", "GET", `${U}/me/health-records?memberId=self`, {
       desc: "Filters: `memberId`, `recordType`, `source`, `from`, `to`, `limit`. Paged with `next.before` + `next.beforeId`.",
@@ -434,7 +424,6 @@ const collection = {
   variable: [
     { key: "baseUrl", value: "http://localhost:8089" },
     { key: "gatewaySecret", value: "" },
-    { key: "labscanToken", value: "" },
     ...["userId", "otherUserId", "patientNumber", "familyMemberId", "conditionId", "allergyId", "medicationId", "vitalId", "sourceRecordId", "healthRecordId", "attachmentId"].map(
       (key) => ({ key, value: "" }),
     ),
@@ -449,7 +438,6 @@ const environment = {
   values: [
     { key: "baseUrl", value: "http://localhost:8089", type: "default", enabled: true },
     { key: "gatewaySecret", value: "", type: "secret", enabled: true },
-    { key: "labscanToken", value: "", type: "secret", enabled: true },
   ],
   _postman_variable_scope: "environment",
 };
