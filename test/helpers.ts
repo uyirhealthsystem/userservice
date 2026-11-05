@@ -27,7 +27,7 @@ export function asUser(userId: string, role = "PATIENT") {
 /** A new patient (fresh token subject) - not onboarded yet. */
 export const newPatient = () => asUser(randomUUID());
 
-export const PROFILE = { fullName: "Ravi Kumar", dateOfBirth: "1990-05-14", gender: "MALE", bloodGroup: "O+" };
+export const PROFILE = { fullName: "Ravi Kumar", dateOfBirth: "1990-05-14", gender: "MALE", bloodGroup: "O+", email: "ravi.kumar@example.com" };
 
 // Consent to the privacy notice (PRIVACY_NOTICE_VERSION defaults to "1").
 export const CONSENT = { noticeVersion: "1", adultDeclaration: true as const };

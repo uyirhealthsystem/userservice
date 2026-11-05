@@ -65,6 +65,7 @@ const PROFILE = {
   dateOfBirth: "1990-05-14",
   gender: "MALE",
   phone: "9876543210",
+  email: "ravi.kumar@example.com",
   bloodGroup: "O+",
   address: "12, Anna Nagar",
   district: "Chennai",
@@ -92,13 +93,18 @@ const onboarding = folder(
       tests: [...status(200), `pm.test("consent required", () => pm.expect(pm.response.json().consentRequired).to.eql(true));`],
     }),
     req("Create profile with invalid PIN (400)", "POST", `${U}/me`, {
-      body: { fullName: "Ravi Kumar", pinCode: "60004", consent: CONSENT },
+      body: { fullName: "Ravi Kumar", email: "ravi.kumar@example.com", pinCode: "60004", consent: CONSENT },
       tests: errorCode(400, "VALIDATION_ERROR"),
     }),
     req("Create profile without consent (400)", "POST", `${U}/me`, {
       body: PROFILE,
       desc: "Nothing is stored without consent to the privacy notice (DPDP Act).",
       tests: errorCode(400, "VALIDATION_ERROR"),
+    }),
+    req("Create profile without email (400)", "POST", `${U}/me`, {
+      body: { ...PROFILE, email: undefined, consent: CONSENT },
+      desc: "`email` is required when the profile is created: `fieldErrors.email` = `[\"email is required.\"]`.",
+      tests: [...errorCode(400, "VALIDATION_ERROR"), `pm.test("email required", () => pm.expect(pm.response.json().error.details.fieldErrors.email).to.eql(["email is required."]));`],
     }),
     req("Create profile with a too-long referral code (400)", "POST", `${U}/me`, {
       body: { ...PROFILE, consent: CONSENT, referralCode: "X".repeat(31) },
@@ -118,7 +124,7 @@ const onboarding = folder(
     }),
     req("Create my profile (onboarding)", "POST", `${U}/me`, {
       body: { ...PROFILE, consent: CONSENT, referralCode: "{{referralCode}}" },
-      desc: "`201 { user: { id, status, createdAt, patientNumber }, profile }`. `fullName` and `consent` ({ noticeVersion, adultDeclaration: true }) are required. The user id is always the caller's - an `id` in the body is ignored.\n\nOptional `referralCode` (at most 30 characters, any letter case; empty = none): the Health Partner who brought the patient in. Checked with the HP service (`400 INVALID_REFERRAL_CODE` if it doesn't know it, so the patient can correct it; accepted unchecked if HP is down or not configured). Only at creation. The HP earns ₹10 once the patient links their own ABHA - docs/referrals.md.\n\nHere it is the environment's `referralCode` - a real HP's code to try the referral flow, or empty.",
+      desc: "`201 { user: { id, status, createdAt, patientNumber }, profile }`. `fullName`, `email` (stored trimmed and lower-case) and `consent` ({ noticeVersion, adultDeclaration: true }) are required. The user id is always the caller's - an `id` in the body is ignored.\n\nOptional `referralCode` (at most 30 characters, any letter case; empty = none): the Health Partner who brought the patient in. Checked with the HP service (`400 INVALID_REFERRAL_CODE` if it doesn't know it, so the patient can correct it; accepted unchecked if HP is down or not configured). Only at creation. The HP earns ₹10 once the patient links their own ABHA - docs/referrals.md.\n\nHere it is the environment's `referralCode` - a real HP's code to try the referral flow, or empty.",
       pre: [`if (!pm.variables.get("referralCode")) pm.variables.set("referralCode", ""); // unset = no code`],
       tests: [
         ...status(201),
@@ -143,8 +149,8 @@ const onboarding = folder(
     req("Get profile", "GET", `${U}/me/profile`, { tests: status(200) }),
     req("Replace profile", "PUT", `${U}/me/profile`, {
       body: { fullName: "Ravi Kumar", dateOfBirth: "1990-05-14", gender: "MALE", bloodGroup: "O+", district: "Chennai", pinCode: "600040" },
-      desc: "Full replace - optional fields left out (here `phone`, `address`) are cleared. Before onboarding a PUT creates the profile instead (`201`), like the old authservice endpoint.",
-      tests: [...status(200), `pm.test("omitted field cleared", () => pm.expect(pm.response.json().profile.phone).to.eql(null));`],
+      desc: "Full replace - optional fields left out (here `phone`, `address`) are cleared, except `email`: left out keeps it, `null` clears it. Before onboarding a PUT creates the profile instead (`201`), like the old authservice endpoint.",
+      tests: [...status(200), `pm.test("omitted field cleared", () => pm.expect(pm.response.json().profile.phone).to.eql(null));`, `pm.test("email kept", () => pm.expect(pm.response.json().profile.email).to.eql("ravi.kumar@example.com"));`],
     }),
     req("Replace profile with a referral code (400 REFERRAL_CODE_SIGNUP_ONLY)", "PUT", `${U}/me/profile`, {
       body: { fullName: "Ravi Kumar", referralCode: "HPXXXXXXXX" },

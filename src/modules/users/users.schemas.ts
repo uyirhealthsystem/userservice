@@ -27,9 +27,19 @@ export const personFields = {
     .nullish(),
 };
 
+// Stored trimmed and lower-cased so one address is one value.
+const email = z.preprocess(
+  (v) => (typeof v === "string" ? v.trim().toLowerCase() : v),
+  z
+    .email({ error: (iss) => (iss.input == null ? "email is required." : "email must be a valid email address.") })
+    .max(200),
+);
+
 // POST /api/v1/users/me (create) and PUT /api/v1/users/me/profile (replace).
+// email is optional here; POST /me requires it (onboardingSchema).
 export const profileSchema = z.object({
   ...personFields,
+  email: email.nullish(),
   address: z.string().trim().max(500).nullish(),
 });
 
@@ -44,7 +54,12 @@ export const referralCodeSchema = z.preprocess(
 // POST /api/v1/users/me: the profile plus consent to the privacy notice -
 // nothing is stored without it (DPDP Act). PUT /me/profile takes the same
 // consent when it creates the profile (old apps onboard that way).
-export const onboardingSchema = profileSchema.extend({ consent: selfConsentSchema, referralCode: referralCodeSchema });
+// email is required here: every new profile has one.
+export const onboardingSchema = profileSchema.extend({
+  email: z.preprocess((v) => v ?? undefined, email),
+  consent: selfConsentSchema,
+  referralCode: referralCodeSchema,
+});
 export const replaceProfileSchema = profileSchema.extend({
   consent: selfConsentSchema.optional(),
   referralCode: referralCodeSchema,

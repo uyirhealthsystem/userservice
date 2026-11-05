@@ -49,6 +49,7 @@ model PatientProfile {
   dateOfBirth DateTime? @db.Date
   gender      String?
   phone       String?
+  email       String? // collected at onboarding (POST /me); null on profiles created before it was asked
   bloodGroup  String?
   address     String?
   district    String?

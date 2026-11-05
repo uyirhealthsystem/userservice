@@ -93,7 +93,7 @@ describe("health record ingestion (internal)", () => {
     const headers = newPatient();
     expect((await pushRecord(labReport(headers))).status).toBe(201);
 
-    await api.post("/api/v1/users/me").set(headers).send({ fullName: "Late Onboarder", consent: CONSENT });
+    await api.post("/api/v1/users/me").set(headers).send({ fullName: "Late Onboarder", email: "late@example.com", consent: CONSENT });
     const list = await api.get(RECORDS).set(headers);
     expect(list.body.healthRecords).toHaveLength(1);
   });
