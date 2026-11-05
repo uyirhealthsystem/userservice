@@ -91,9 +91,10 @@ export async function exportData(userId: string) {
  */
 export async function eraseAccount(userId: string, actorRole: string, requestId: string | null) {
   await prisma.$transaction(async (tx) => {
-    // Not relations of users: provider records and pending OTPs.
+    // Not relations of users: provider records, pending OTPs, ABHA creation.
     await tx.healthRecord.deleteMany({ where: { userId } });
     await tx.abhaOtpVerification.deleteMany({ where: { userId } });
+    await tx.abhaEnrolment.deleteMany({ where: { userId } });
     // Cascades to profile, family, medical records, ABHA links (and their
     // care contexts) and nominee.
     await tx.user.deleteMany({ where: { id: userId } });

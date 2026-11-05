@@ -114,6 +114,7 @@ Based on each service's current data model:
 | POST | `/me/abha/otp` | `{ abhaNumber, memberId?, otpMethod?: "abdm"\|"aadhaar" }`: OTP to the ABHA's mobile |
 | POST | `/me/abha/verify` | `{ otp, memberId? }`: links the ABHA (201) |
 | DELETE | `/me/abha/:id` | unlinks it here |
+| * | `/me/abha/create/...` | creates an ABHA by Aadhaar OTP and links it: [abha-creation.md](abha-creation.md) |
 
 Provider records are read-only for the patient. ABHA rules: OTP valid 10 min,
 60 s between OTP requests, 3 wrong OTPs and it is discarded. One ABHA per

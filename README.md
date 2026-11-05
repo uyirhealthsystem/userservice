@@ -60,6 +60,7 @@ All under `/api/v1/users`. Errors: `{ "error": { "code", "message" } }`.
 | GET | `/me/health-records`, `/me/health-records/:id`, `.../attachments/:attachmentId` | records from providers (read-only) |
 | GET | `/me/medical-history` | `?memberId=self\|<id>` - self-recorded + provider records in one view |
 | GET / POST / DELETE | `/me/abha`, `/me/abha/otp`, `/me/abha/verify`, `/me/abha/:id` | link an ABHA to self or a family member |
+| GET / POST / DELETE | `/me/abha/create/...` | create an ABHA by Aadhaar OTP and link it (self only; optional, never part of profile creation) - [docs/abha-creation.md](docs/abha-creation.md) |
 | GET | `/family-members` | **internal**, for homebasedcare: `X-User-Id` only, no token (anyone who can reach the service can call it); consented members only |
 | GET | `/internal/v1/users/:userId` | **internal**, any service, no token (not via the gateway); optional `X-Service-Name: <caller>` for the audit, else `UNKNOWN`. `{ user, profile }` with `profile.age`; `?fields=fullName,age,gender,phone` returns only those (plus `user.id`) - any of `patientNumber status createdAt fullName dateOfBirth age gender phone bloodGroup address district pinCode`, unknown → `400`; `404` not onboarded, `403 CONSENT_REQUIRED` without CARE consent; audited |
 | POST | `/internal/v1/health-records` | **internal**, producers only (no token; not via the gateway) |

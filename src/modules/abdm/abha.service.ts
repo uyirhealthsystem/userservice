@@ -19,7 +19,7 @@ export const normaliseAbha = (abha: string) => abha.replace(/-/g, "");
 
 // Linking shares the subject's records through ABDM: it needs their CARE
 // consent (a member) and their ABDM_SHARING consent.
-async function checkSubject(userId: string, subject: string) {
+export async function checkSubject(userId: string, subject: string) {
   if (subject !== "self") await consentedMember(userId, subject);
   await assertConsent(userId, subject, "ABDM_SHARING");
 }
@@ -29,6 +29,7 @@ export const linkSelect = {
   familyMemberId: true,
   abhaNumber: true,
   abhaAddress: true,
+  source: true,
   name: true,
   verifiedAt: true,
   createdAt: true,
@@ -129,16 +130,16 @@ export async function unlinkAbha(userId: string, id: string) {
   if (count === 0) throw Errors.notFound("ABHA link");
 }
 
-async function assertAbhaFree(abhaNumber: string) {
+export async function assertAbhaFree(abhaNumber: string) {
   if (await prisma.abhaLink.findUnique({ where: { abhaNumber }, select: { id: true } })) {
     throw Errors.conflict("ABHA_IN_USE", "This ABHA is already linked to a patient on Uyir.");
   }
 }
 
-const profileName = (p: AbdmProfile) =>
+export const profileName = (p: AbdmProfile) =>
   p.name ?? ([p.firstName, p.middleName, p.lastName].filter(Boolean).join(" ") || null);
 
-function profileYear(p: AbdmProfile): number | null {
+export function profileYear(p: AbdmProfile): number | null {
   const year = Number(p.yearOfBirth ?? p.dateOfBirth?.match(/\d{4}/)?.[0]);
   return Number.isInteger(year) && year > 1900 ? year : null;
 }
@@ -148,7 +149,7 @@ const GENDER_CODE: Record<string, string> = { MALE: "M", FEMALE: "F", OTHER: "O"
 // The ABHA must be this person's: where both sides know gender and year of
 // birth, they have to agree (a parent may hold a child's ABHA OTP, so the OTP
 // alone doesn't prove whose record this is).
-async function assertDemographicsMatch(userId: string, subject: string, profile: AbdmProfile) {
+export async function assertDemographicsMatch(userId: string, subject: string, profile: AbdmProfile) {
   const person =
     subject === "self"
       ? await prisma.patientProfile.findUnique({ where: { userId }, select: { gender: true, dateOfBirth: true } })

@@ -10,7 +10,7 @@ export async function resetDb() {
   // users, so they are listed too.
   await prisma.$executeRawUnsafe(
     'TRUNCATE TABLE "users", "access_audit", "health_records", "health_record_rejections", ' +
-      '"abha_otp_verifications", "abdm_consents", "abdm_data_requests", "privacy_consents" RESTART IDENTITY CASCADE',
+      '"abha_otp_verifications", "abha_enrolments", "abdm_consents", "abdm_data_requests", "privacy_consents" RESTART IDENTITY CASCADE',
   );
 }
 
