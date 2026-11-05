@@ -21,6 +21,7 @@ const profileSelect = {
   dateOfBirth: true,
   gender: true,
   phone: true,
+  email: true,
   bloodGroup: true,
   address: true,
   district: true,
@@ -42,13 +43,17 @@ function publicProfile(profile: ProfileRow) {
   return { ...profile, age: ageFromDob(profile.dateOfBirth) };
 }
 
-// Omitted optional fields are cleared on a replace, not left as they were.
+// Omitted optional fields are cleared on a replace, not left as they were -
+// except email: an app that doesn't send it yet must not wipe the one given
+// at onboarding, so omitted keeps it (undefined = untouched for Prisma) and
+// only an explicit null clears it.
 function fullProfile(data: z.infer<typeof profileSchema>) {
   return {
     fullName: data.fullName,
     dateOfBirth: data.dateOfBirth ?? null,
     gender: data.gender ?? null,
     phone: data.phone ?? null,
+    email: data.email,
     bloodGroup: data.bloodGroup ?? null,
     address: data.address ?? null,
     district: data.district ?? null,
@@ -132,6 +137,7 @@ export const SERVICE_PROFILE_FIELDS = [
   "age",
   "gender",
   "phone",
+  "email",
   "bloodGroup",
   "address",
   "district",

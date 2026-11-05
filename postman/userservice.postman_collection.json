@@ -187,7 +187,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"pinCode\": \"60004\",\n  \"consent\": {\n    \"noticeVersion\": \"1\",\n    \"adultDeclaration\": true\n  }\n}",
+              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"email\": \"ravi.kumar@example.com\",\n  \"pinCode\": \"60004\",\n  \"consent\": {\n    \"noticeVersion\": \"1\",\n    \"adultDeclaration\": true\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -240,7 +240,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"dateOfBirth\": \"1990-05-14\",\n  \"gender\": \"MALE\",\n  \"phone\": \"9876543210\",\n  \"bloodGroup\": \"O+\",\n  \"address\": \"12, Anna Nagar\",\n  \"district\": \"Chennai\",\n  \"pinCode\": \"600040\"\n}",
+              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"dateOfBirth\": \"1990-05-14\",\n  \"gender\": \"MALE\",\n  \"phone\": \"9876543210\",\n  \"email\": \"ravi.kumar@example.com\",\n  \"bloodGroup\": \"O+\",\n  \"address\": \"12, Anna Nagar\",\n  \"district\": \"Chennai\",\n  \"pinCode\": \"600040\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -248,6 +248,61 @@
               }
             },
             "description": "Nothing is stored without consent to the privacy notice (DPDP Act)."
+          }
+        },
+        {
+          "name": "Create profile without email (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));",
+                  "pm.test(\"email required\", () => pm.expect(pm.response.json().error.details.fieldErrors.email).to.eql([\"email is required.\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "PATIENT"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "{{gatewaySecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"dateOfBirth\": \"1990-05-14\",\n  \"gender\": \"MALE\",\n  \"phone\": \"9876543210\",\n  \"bloodGroup\": \"O+\",\n  \"address\": \"12, Anna Nagar\",\n  \"district\": \"Chennai\",\n  \"pinCode\": \"600040\",\n  \"consent\": {\n    \"noticeVersion\": \"1\",\n    \"adultDeclaration\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "`email` is required when the profile is created: `fieldErrors.email` = `[\"email is required.\"]`."
           }
         },
         {
@@ -294,7 +349,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"dateOfBirth\": \"1990-05-14\",\n  \"gender\": \"MALE\",\n  \"phone\": \"9876543210\",\n  \"bloodGroup\": \"O+\",\n  \"address\": \"12, Anna Nagar\",\n  \"district\": \"Chennai\",\n  \"pinCode\": \"600040\",\n  \"consent\": {\n    \"noticeVersion\": \"1\",\n    \"adultDeclaration\": true\n  },\n  \"referralCode\": \"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\"\n}",
+              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"dateOfBirth\": \"1990-05-14\",\n  \"gender\": \"MALE\",\n  \"phone\": \"9876543210\",\n  \"email\": \"ravi.kumar@example.com\",\n  \"bloodGroup\": \"O+\",\n  \"address\": \"12, Anna Nagar\",\n  \"district\": \"Chennai\",\n  \"pinCode\": \"600040\",\n  \"consent\": {\n    \"noticeVersion\": \"1\",\n    \"adultDeclaration\": true\n  },\n  \"referralCode\": \"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -360,7 +415,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"dateOfBirth\": \"1990-05-14\",\n  \"gender\": \"MALE\",\n  \"phone\": \"9876543210\",\n  \"bloodGroup\": \"O+\",\n  \"address\": \"12, Anna Nagar\",\n  \"district\": \"Chennai\",\n  \"pinCode\": \"600040\",\n  \"consent\": {\n    \"noticeVersion\": \"1\",\n    \"adultDeclaration\": true\n  },\n  \"referralCode\": \"HPNOSUCHCODE0\"\n}",
+              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"dateOfBirth\": \"1990-05-14\",\n  \"gender\": \"MALE\",\n  \"phone\": \"9876543210\",\n  \"email\": \"ravi.kumar@example.com\",\n  \"bloodGroup\": \"O+\",\n  \"address\": \"12, Anna Nagar\",\n  \"district\": \"Chennai\",\n  \"pinCode\": \"600040\",\n  \"consent\": {\n    \"noticeVersion\": \"1\",\n    \"adultDeclaration\": true\n  },\n  \"referralCode\": \"HPNOSUCHCODE0\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -426,14 +481,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"dateOfBirth\": \"1990-05-14\",\n  \"gender\": \"MALE\",\n  \"phone\": \"9876543210\",\n  \"bloodGroup\": \"O+\",\n  \"address\": \"12, Anna Nagar\",\n  \"district\": \"Chennai\",\n  \"pinCode\": \"600040\",\n  \"consent\": {\n    \"noticeVersion\": \"1\",\n    \"adultDeclaration\": true\n  },\n  \"referralCode\": \"{{referralCode}}\"\n}",
+              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"dateOfBirth\": \"1990-05-14\",\n  \"gender\": \"MALE\",\n  \"phone\": \"9876543210\",\n  \"email\": \"ravi.kumar@example.com\",\n  \"bloodGroup\": \"O+\",\n  \"address\": \"12, Anna Nagar\",\n  \"district\": \"Chennai\",\n  \"pinCode\": \"600040\",\n  \"consent\": {\n    \"noticeVersion\": \"1\",\n    \"adultDeclaration\": true\n  },\n  \"referralCode\": \"{{referralCode}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "`201 { user: { id, status, createdAt, patientNumber }, profile }`. `fullName` and `consent` ({ noticeVersion, adultDeclaration: true }) are required. The user id is always the caller's - an `id` in the body is ignored.\n\nOptional `referralCode` (at most 30 characters, any letter case; empty = none): the Health Partner who brought the patient in. Checked with the HP service (`400 INVALID_REFERRAL_CODE` if it doesn't know it, so the patient can correct it; accepted unchecked if HP is down or not configured). Only at creation. The HP earns ₹10 once the patient links their own ABHA - docs/referrals.md.\n\nHere it is the environment's `referralCode` - a real HP's code to try the referral flow, or empty."
+            "description": "`201 { user: { id, status, createdAt, patientNumber }, profile }`. `fullName`, `email` (stored trimmed and lower-case) and `consent` ({ noticeVersion, adultDeclaration: true }) are required. The user id is always the caller's - an `id` in the body is ignored.\n\nOptional `referralCode` (at most 30 characters, any letter case; empty = none): the Health Partner who brought the patient in. Checked with the HP service (`400 INVALID_REFERRAL_CODE` if it doesn't know it, so the patient can correct it; accepted unchecked if HP is down or not configured). Only at creation. The HP earns ₹10 once the patient links their own ABHA - docs/referrals.md.\n\nHere it is the environment's `referralCode` - a real HP's code to try the referral flow, or empty."
           }
         },
         {
@@ -480,7 +535,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"dateOfBirth\": \"1990-05-14\",\n  \"gender\": \"MALE\",\n  \"phone\": \"9876543210\",\n  \"bloodGroup\": \"O+\",\n  \"address\": \"12, Anna Nagar\",\n  \"district\": \"Chennai\",\n  \"pinCode\": \"600040\",\n  \"consent\": {\n    \"noticeVersion\": \"1\",\n    \"adultDeclaration\": true\n  }\n}",
+              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"dateOfBirth\": \"1990-05-14\",\n  \"gender\": \"MALE\",\n  \"phone\": \"9876543210\",\n  \"email\": \"ravi.kumar@example.com\",\n  \"bloodGroup\": \"O+\",\n  \"address\": \"12, Anna Nagar\",\n  \"district\": \"Chennai\",\n  \"pinCode\": \"600040\",\n  \"consent\": {\n    \"noticeVersion\": \"1\",\n    \"adultDeclaration\": true\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -588,7 +643,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"omitted field cleared\", () => pm.expect(pm.response.json().profile.phone).to.eql(null));"
+                  "pm.test(\"omitted field cleared\", () => pm.expect(pm.response.json().profile.phone).to.eql(null));",
+                  "pm.test(\"email kept\", () => pm.expect(pm.response.json().profile.email).to.eql(\"ravi.kumar@example.com\"));"
                 ]
               }
             }
@@ -631,7 +687,7 @@
                 }
               }
             },
-            "description": "Full replace - optional fields left out (here `phone`, `address`) are cleared. Before onboarding a PUT creates the profile instead (`201`), like the old authservice endpoint."
+            "description": "Full replace - optional fields left out (here `phone`, `address`) are cleared, except `email`: left out keeps it, `null` clears it. Before onboarding a PUT creates the profile instead (`201`), like the old authservice endpoint."
           }
         },
         {

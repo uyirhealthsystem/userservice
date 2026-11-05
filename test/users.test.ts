@@ -66,6 +66,23 @@ describe("onboarding: POST /me", () => {
     expect((await api.post(ME).set(newPatient()).send({ fullName: "A", bloodGroup: "Z+" })).status).toBe(400);
   });
 
+  it("requires a valid email, stored trimmed and lower-cased", async () => {
+    const { email: _email, ...noEmail } = ONBOARDING;
+    for (const body of [noEmail, { ...ONBOARDING, email: null }, { ...ONBOARDING, email: "" }, { ...ONBOARDING, email: "ravi@" }]) {
+      const res = await api.post(ME).set(newPatient()).send(body);
+      expect(res.status).toBe(400);
+      expect(res.body.error.details.fieldErrors.email).toBeDefined();
+    }
+    const missing = await api.post(ME).set(newPatient()).send(noEmail);
+    expect(missing.body.error.details.fieldErrors.email).toEqual(["email is required."]);
+
+    const headers = newPatient();
+    const created = await api.post(ME).set(headers).send({ ...ONBOARDING, email: "  Ravi.Kumar@Example.COM " });
+    expect(created.status).toBe(201);
+    expect(created.body.profile.email).toBe("ravi.kumar@example.com");
+    expect((await api.get(ME).set(headers)).body.profile.email).toBe("ravi.kumar@example.com");
+  });
+
   it("ignores an id in the body - the user is always the caller", async () => {
     const headers = newPatient();
     const res = await api.post(ME).set(headers).send({ ...ONBOARDING, id: crypto.randomUUID(), userId: crypto.randomUUID() });
@@ -83,6 +100,22 @@ describe("profile: GET / PUT /me/profile", () => {
     expect(res.status).toBe(200);
     expect(res.body.profile).toMatchObject({ fullName: "Ravi K", gender: null, bloodGroup: null, age: null });
     expect((await api.get(PROFILE_PATH).set(headers)).body.profile.fullName).toBe("Ravi K");
+  });
+
+  it("PUT keeps the email when omitted, changes it when sent, clears it only on null", async () => {
+    const headers = await onboardedPatient();
+    expect((await api.put(PROFILE_PATH).set(headers).send({ fullName: "Ravi K" })).body.profile.email).toBe(PROFILE.email);
+    const changed = await api.put(PROFILE_PATH).set(headers).send({ fullName: "Ravi K", email: "New@Example.com" });
+    expect(changed.body.profile.email).toBe("new@example.com");
+    expect((await api.put(PROFILE_PATH).set(headers).send({ fullName: "Ravi K", email: "nope" })).status).toBe(400);
+    expect((await api.put(PROFILE_PATH).set(headers).send({ fullName: "Ravi K", email: null })).body.profile.email).toBeNull();
+  });
+
+  it("PUT that creates the profile (old apps) does not need an email", async () => {
+    const { email: _email, ...noEmail } = ONBOARDING;
+    const res = await api.put(PROFILE_PATH).set(newPatient()).send(noEmail);
+    expect(res.status).toBe(201);
+    expect(res.body.profile.email).toBeNull();
   });
 
   it("every own-profile response carries age from dateOfBirth", async () => {

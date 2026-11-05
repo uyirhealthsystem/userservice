@@ -28,7 +28,7 @@ Signup does not touch this service. After login the app calls:
 
 1. `GET /api/v1/users/me` → `404 PROFILE_REQUIRED` = show "Create your profile"
    with the privacy notice (`GET /api/v1/users/me/privacy` gives its version).
-2. `POST /api/v1/users/me` with the profile and
+2. `POST /api/v1/users/me` with the profile (`fullName` and `email` required) and
    `consent: { noticeVersion, adultDeclaration: true }` → `201 { user, profile }`.
    Creates the user record (with `patientNumber`, e.g. `UYR-0000001`), the
    profile and the consent record in one transaction. `409 PROFILE_EXISTS` the
@@ -49,7 +49,7 @@ All under `/api/v1/users`. Errors: `{ "error": { "code", "message" } }`.
 | Method | Path | |
 |---|---|---|
 | GET | `/me` | `{ user, profile, privacy }` - every profile response also has `age` (whole years from `dateOfBirth`, `null` if unknown; read-only) |
-| POST | `/me` | onboarding (body = profile + `consent`; `fullName` and `consent` required) |
+| POST | `/me` | onboarding (body = profile + `consent`; `fullName`, `email` and `consent` required) |
 | DELETE | `/me` | erase the account's data - body `{ "confirm": "DELETE_MY_DATA" }` |
 | GET / PUT | `/me/profile` | read / full replace (PUT before onboarding creates it, with `consent` - the old authservice behaviour) |
 | GET | `/me/privacy` | notice (version, URL, grievance officer) + the patient's consents |
@@ -65,12 +65,12 @@ All under `/api/v1/users`. Errors: `{ "error": { "code", "message" } }`.
 | GET / POST / DELETE | `/me/abha`, `/me/abha/otp`, `/me/abha/verify`, `/me/abha/:id` | link an ABHA to self or a family member |
 | GET / POST / DELETE | `/me/abha/create/...` | create an ABHA by Aadhaar OTP and link it (self only; optional, never part of profile creation) - [docs/abha-creation.md](docs/abha-creation.md) |
 | GET | `/family-members` | **internal**, for homebasedcare: `X-User-Id` only, no token (anyone who can reach the service can call it); consented members only |
-| GET | `/internal/v1/users/:userId` | **internal**, any service, no token (not via the gateway); optional `X-Service-Name: <caller>` for the audit, else `UNKNOWN`. `{ user, profile }` with `profile.age`; `?fields=fullName,age,gender,phone` returns only those (plus `user.id`) - any of `patientNumber status createdAt fullName dateOfBirth age gender phone bloodGroup address district pinCode`, unknown → `400`; `404` not onboarded, `403 CONSENT_REQUIRED` without CARE consent; audited |
+| GET | `/internal/v1/users/:userId` | **internal**, any service, no token (not via the gateway); optional `X-Service-Name: <caller>` for the audit, else `UNKNOWN`. `{ user, profile }` with `profile.age`; `?fields=fullName,age,gender,phone` returns only those (plus `user.id`) - any of `patientNumber status createdAt fullName dateOfBirth age gender phone email bloodGroup address district pinCode`, unknown → `400`; `404` not onboarded, `403 CONSENT_REQUIRED` without CARE consent; audited |
 | POST | `/internal/v1/health-records` | **internal**, producers only (no token; not via the gateway) |
 | POST | `/abdm/api/v3/...` | ABDM bridge callbacks (ABDM-signed JWT) |
 
 Field values: `gender` MALE · FEMALE · OTHER; `bloodGroup` A± B± AB± O±;
-`pinCode` 6-digit PIN; `relationship` SPOUSE · FATHER · MOTHER · SON ·
+`pinCode` 6-digit PIN; `email` a valid address, stored trimmed and lower-case (required on `POST /me`; on `PUT /me/profile` omitted keeps it, `null` clears it); `relationship` SPOUSE · FATHER · MOTHER · SON ·
 DAUGHTER · BROTHER · SISTER · GRANDPARENT · GRANDCHILD · OTHER; condition
 `status` ACTIVE · RESOLVED; allergy `category` FOOD · DRUG · ENVIRONMENT ·
 OTHER, `severity` MILD · MODERATE · SEVERE; vital `type` BLOOD_PRESSURE
