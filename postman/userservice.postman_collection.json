@@ -251,8 +251,137 @@
           }
         },
         {
+          "name": "Create profile with a too-long referral code (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "PATIENT"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "{{gatewaySecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"dateOfBirth\": \"1990-05-14\",\n  \"gender\": \"MALE\",\n  \"phone\": \"9876543210\",\n  \"bloodGroup\": \"O+\",\n  \"address\": \"12, Anna Nagar\",\n  \"district\": \"Chennai\",\n  \"pinCode\": \"600040\",\n  \"consent\": {\n    \"noticeVersion\": \"1\",\n    \"adultDeclaration\": true\n  },\n  \"referralCode\": \"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "`referralCode` is at most 30 characters. A code the Health Partner service doesn't know is `400 INVALID_REFERRAL_CODE` (needs HP_SERVICE_URL; see docs/referrals.md)."
+          }
+        },
+        {
+          "name": "Create profile with an unknown referral code (400 INVALID_REFERRAL_CODE)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get(\"referralCode\")) {",
+                  "  console.log(\"referralCode not set - skipping the HP code check\");",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error INVALID_REFERRAL_CODE\", () => pm.expect(pm.response.json().error.code).to.eql(\"INVALID_REFERRAL_CODE\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "PATIENT"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "{{gatewaySecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"dateOfBirth\": \"1990-05-14\",\n  \"gender\": \"MALE\",\n  \"phone\": \"9876543210\",\n  \"bloodGroup\": \"O+\",\n  \"address\": \"12, Anna Nagar\",\n  \"district\": \"Chennai\",\n  \"pinCode\": \"600040\",\n  \"consent\": {\n    \"noticeVersion\": \"1\",\n    \"adultDeclaration\": true\n  },\n  \"referralCode\": \"HPNOSUCHCODE0\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "The Health Partner service doesn't know the code: refused, and nothing is created, so the patient can correct it or leave it empty. Runs only when `referralCode` is set in the environment (that is, userservice is wired to the HP service with `HP_SERVICE_URL`) - without HP the code would be accepted unchecked."
+          }
+        },
+        {
           "name": "Create my profile (onboarding)",
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get(\"referralCode\")) pm.variables.set(\"referralCode\", \"\"); // unset = no code"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -297,14 +426,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"dateOfBirth\": \"1990-05-14\",\n  \"gender\": \"MALE\",\n  \"phone\": \"9876543210\",\n  \"bloodGroup\": \"O+\",\n  \"address\": \"12, Anna Nagar\",\n  \"district\": \"Chennai\",\n  \"pinCode\": \"600040\",\n  \"consent\": {\n    \"noticeVersion\": \"1\",\n    \"adultDeclaration\": true\n  }\n}",
+              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"dateOfBirth\": \"1990-05-14\",\n  \"gender\": \"MALE\",\n  \"phone\": \"9876543210\",\n  \"bloodGroup\": \"O+\",\n  \"address\": \"12, Anna Nagar\",\n  \"district\": \"Chennai\",\n  \"pinCode\": \"600040\",\n  \"consent\": {\n    \"noticeVersion\": \"1\",\n    \"adultDeclaration\": true\n  },\n  \"referralCode\": \"{{referralCode}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "`201 { user: { id, status, createdAt, patientNumber }, profile }`. `fullName` and `consent` ({ noticeVersion, adultDeclaration: true }) are required. The user id is always the caller's - an `id` in the body is ignored."
+            "description": "`201 { user: { id, status, createdAt, patientNumber }, profile }`. `fullName` and `consent` ({ noticeVersion, adultDeclaration: true }) are required. The user id is always the caller's - an `id` in the body is ignored.\n\nOptional `referralCode` (at most 30 characters, any letter case; empty = none): the Health Partner who brought the patient in. Checked with the HP service (`400 INVALID_REFERRAL_CODE` if it doesn't know it, so the patient can correct it; accepted unchecked if HP is down or not configured). Only at creation. The HP earns ₹10 once the patient links their own ABHA - docs/referrals.md.\n\nHere it is the environment's `referralCode` - a real HP's code to try the referral flow, or empty."
           }
         },
         {
@@ -503,6 +632,61 @@
               }
             },
             "description": "Full replace - optional fields left out (here `phone`, `address`) are cleared. Before onboarding a PUT creates the profile instead (`201`), like the old authservice endpoint."
+          }
+        },
+        {
+          "name": "Replace profile with a referral code (400 REFERRAL_CODE_SIGNUP_ONLY)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error REFERRAL_CODE_SIGNUP_ONLY\", () => pm.expect(pm.response.json().error.code).to.eql(\"REFERRAL_CODE_SIGNUP_ONLY\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "PATIENT"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "{{gatewaySecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me",
+                "profile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Ravi Kumar\",\n  \"referralCode\": \"HPXXXXXXXX\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "A referral code can only be given when the profile is created."
           }
         }
       ]
@@ -2334,7 +2518,12 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"profile included\", () => pm.expect(pm.response.json().profile.fullName).to.eql(\"Ravi Kumar\"));"
+                  "const j = pm.response.json();",
+                  "pm.test(\"profile included\", () => pm.expect(j.profile.fullName).to.eql(\"Ravi Kumar\"));",
+                  "const code = pm.variables.get(\"referralCode\");",
+                  "pm.test(\"referral: the code given at signup, or null\", () => code",
+                  "  ? pm.expect(j.referral && j.referral.code).to.eql(code)",
+                  "  : pm.expect(j.referral).to.eql(null));"
                 ]
               }
             }
@@ -2467,6 +2656,745 @@
                 "nominee"
               ]
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ABHA creation",
+      "description": "Creates an ABHA for a patient who has none, by Aadhaar OTP, and links it. **Optional and separate from profile creation** - `POST /me` never calls ABDM. Self only for now; family members link an existing ABHA instead.\n\nFlow: consent text → Aadhaar OTP → verify (ABHA created and linked, 201, `next`) → [mobile OTP + verify when `next` is `MOBILE_VERIFY`] → address suggestions → choose address. `next: DONE` means the Aadhaar already had an ABHA and it was linked.\n\nThe real steps run only when the environment sets `aadhaar` (secret) and, one at a time, `aadhaarOtp` / `mobileOtp` from the SMS - otherwise they are skipped. The Aadhaar number is never stored or logged by userservice.\n\nContract: `docs/abha-creation.md`.",
+      "item": [
+        {
+          "name": "Consent to ABDM sharing (for ABHA creation)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "PATIENT"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "{{gatewaySecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/consents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me",
+                "consents"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"purpose\": \"ABDM_SHARING\",\n  \"noticeVersion\": \"1\",\n  \"adultDeclaration\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Every ABHA creation step needs this consent (`403 CONSENT_REQUIRED` otherwise)."
+          }
+        },
+        {
+          "name": "Aadhaar consent text",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test(\"text and version\", () => { pm.expect(j.text).to.be.a(\"string\"); pm.expect(j.code).to.eql(\"abha-enrollment\"); });",
+                  "pm.collectionVariables.set(\"aadhaarConsentVersion\", j.version);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "PATIENT"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "{{gatewaySecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/abha/create/consent-text",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me",
+                "abha",
+                "create",
+                "consent-text"
+              ]
+            },
+            "description": "ABDM's Aadhaar consent - show it word for word before the Aadhaar field, and send its `version` back."
+          }
+        },
+        {
+          "name": "Aadhaar OTP - invalid number (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));",
+                  "pm.test(\"not echoed\", () => pm.expect(pm.response.text()).to.not.include(\"234123412345\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "PATIENT"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "{{gatewaySecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/abha/create/aadhaar/otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me",
+                "abha",
+                "create",
+                "aadhaar",
+                "otp"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"aadhaar\": \"234123412345\",\n  \"consent\": {\n    \"accepted\": true,\n    \"version\": \"{{aadhaarConsentVersion}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "12 digits with a Verhoeff check digit, checked before anything reaches ABDM. The number is never echoed back."
+          }
+        },
+        {
+          "name": "Aadhaar OTP for a family member (400 self only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error ABHA_CREATE_SELF_ONLY\", () => pm.expect(pm.response.json().error.code).to.eql(\"ABHA_CREATE_SELF_ONLY\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "PATIENT"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "{{gatewaySecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/abha/create/aadhaar/otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me",
+                "abha",
+                "create",
+                "aadhaar",
+                "otp"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"memberId\": \"{{familyMemberId}}\",\n  \"aadhaar\": \"999941057058\",\n  \"consent\": {\n    \"accepted\": true,\n    \"version\": \"{{aadhaarConsentVersion}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Choose address before creating (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"404 ABHA_ENROLMENT_NOT_FOUND, or 503 without ABDM credentials\", () => {",
+                  "  const code = pm.response.json().error.code;",
+                  "  pm.expect([\"ABHA_ENROLMENT_NOT_FOUND\", \"ABDM_NOT_CONFIGURED\"]).to.include(code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "PATIENT"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "{{gatewaySecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/abha/create/address",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me",
+                "abha",
+                "create",
+                "address"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"abhaAddress\": \"ravi.kumar1990\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Each step checks the creation is at the right point."
+          }
+        },
+        {
+          "name": "Send Aadhaar OTP",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get(\"aadhaar\")) {",
+                  "  console.log(\"aadhaar not set - skipping the real ABHA creation step\");",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "PATIENT"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "{{gatewaySecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/abha/create/aadhaar/otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me",
+                "abha",
+                "create",
+                "aadhaar",
+                "otp"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"aadhaar\": \"{{aadhaar}}\",\n  \"consent\": {\n    \"accepted\": true,\n    \"version\": \"{{aadhaarConsentVersion}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "OTP to the Aadhaar-linked mobile. `409 ABHA_ALREADY_LINKED` if this person has an ABHA; `429` within a minute of the last OTP or after 5 OTPs in a day; `400 AADHAAR_CONSENT_OUTDATED` for an old consent version."
+          }
+        },
+        {
+          "name": "Verify Aadhaar OTP (creates and links the ABHA)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get(\"aadhaar\")) {",
+                  "  console.log(\"aadhaar not set - skipping the real ABHA creation step\");",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"linked\", () => pm.expect(pm.response.json().abhaLink.source).to.eql(\"CREATED\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "PATIENT"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "{{gatewaySecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/abha/create/aadhaar/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me",
+                "abha",
+                "create",
+                "aadhaar",
+                "verify"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"otp\": \"{{aadhaarOtp}}\",\n  \"mobile\": \"{{abhaMobile}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "`mobile` is optional (defaults to the profile's phone). 201 with `abhaLink`, `isNew` and `next`: `ABHA_ADDRESS`, `MOBILE_VERIFY` (the mobile isn't the Aadhaar's) or `DONE` (the Aadhaar already had an ABHA). `409 ABHA_IN_USE` / `ABHA_DEMOGRAPHIC_MISMATCH` and it is not linked. `OTP_INVALID`, and after 3 wrong OTPs `OTP_ATTEMPTS_EXCEEDED`."
+          }
+        },
+        {
+          "name": "Send mobile OTP",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get(\"aadhaar\")) {",
+                  "  console.log(\"aadhaar not set - skipping the real ABHA creation step\");",
+                  "  pm.execution.skipRequest();",
+                  "}",
+                  "if (!pm.variables.get(\"mobileOtp\")) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "PATIENT"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "{{gatewaySecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/abha/create/mobile/otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me",
+                "abha",
+                "create",
+                "mobile",
+                "otp"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Only when `next` was `MOBILE_VERIFY`. Skippable - the ABHA then has no communication mobile. Set `mobileOtp` to run it."
+          }
+        },
+        {
+          "name": "Verify mobile OTP",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get(\"aadhaar\")) {",
+                  "  console.log(\"aadhaar not set - skipping the real ABHA creation step\");",
+                  "  pm.execution.skipRequest();",
+                  "}",
+                  "if (!pm.variables.get(\"mobileOtp\")) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"next: address\", () => pm.expect(pm.response.json().next).to.eql(\"ABHA_ADDRESS\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "PATIENT"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "{{gatewaySecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/abha/create/mobile/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me",
+                "abha",
+                "create",
+                "mobile",
+                "verify"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"otp\": \"{{mobileOtp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "ABHA address suggestions",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get(\"aadhaar\")) {",
+                  "  console.log(\"aadhaar not set - skipping the real ABHA creation step\");",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const s = pm.response.json().suggestions;",
+                  "if (s.length && !pm.variables.get(\"abhaAddress\")) pm.collectionVariables.set(\"abhaAddress\", s[0]);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "PATIENT"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "{{gatewaySecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/abha/create/address-suggestions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me",
+                "abha",
+                "create",
+                "address-suggestions"
+              ]
+            },
+            "description": "`{ suggestions, suffix }` - suffix `@sbx` in the sandbox, `@abdm` in production."
+          }
+        },
+        {
+          "name": "Choose ABHA address",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get(\"aadhaar\")) {",
+                  "  console.log(\"aadhaar not set - skipping the real ABHA creation step\");",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "PATIENT"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "{{gatewaySecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/abha/create/address",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me",
+                "abha",
+                "create",
+                "address"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"abhaAddress\": \"{{abhaAddress}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "8-18 letters/digits, at most one `.` or `_`, without the suffix. `409 ABHA_ADDRESS_TAKEN` when ABDM says it is in use. Ends the creation."
+          }
+        },
+        {
+          "name": "Cancel ABHA creation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "PATIENT"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "{{gatewaySecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/abha/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me",
+                "abha",
+                "create"
+              ]
+            },
+            "description": "Stops a creation in progress. An ABHA already created stays linked - unlink it with `DELETE /me/abha/:id`. Always 204."
           }
         }
       ]
@@ -3168,6 +4096,14 @@
     },
     {
       "key": "attachmentId",
+      "value": ""
+    },
+    {
+      "key": "aadhaarConsentVersion",
+      "value": ""
+    },
+    {
+      "key": "abhaAddress",
       "value": ""
     }
   ]

@@ -180,6 +180,7 @@ export async function withdrawConsent(userId: string, purpose: Purpose, memberId
     if (purpose === "ABDM_SHARING") {
       // No more linking or sharing: the ABHA link (and its care contexts) goes.
       await tx.abhaOtpVerification.deleteMany({ where: { userId, subject } });
+      await tx.abhaEnrolment.deleteMany({ where: { userId, subject } });
       await tx.abhaLink.deleteMany({ where: { userId, subject } });
       return "abha-link";
     }
@@ -188,6 +189,7 @@ export async function withdrawConsent(userId: string, purpose: Purpose, memberId
     // provider records and ABHA link.
     await tx.privacyConsent.updateMany({ where: { userId, familyMemberId, ...active }, data: { withdrawnAt: now } });
     await tx.abhaOtpVerification.deleteMany({ where: { userId, subject } });
+    await tx.abhaEnrolment.deleteMany({ where: { userId, subject } });
     await tx.familyMember.delete({ where: { id: memberId } });
     return "family-member";
   });

@@ -2,13 +2,17 @@ import pino from "pino";
 import { env } from "./env";
 
 // pino-http logs request headers: never write credentials to the logs
-// (gateway secret, producer / ABDM bearer tokens, cookies).
+// (gateway secret, producer / ABDM bearer tokens, cookies), nor Aadhaar numbers.
 export const redact = {
   paths: [
     "req.headers.authorization",
     'req.headers["x-gateway-secret"]',
     "req.headers.cookie",
     'res.headers["set-cookie"]',
+    // ABHA creation: the Aadhaar number must never reach the logs.
+    "aadhaar",
+    "*.aadhaar",
+    "req.body.aadhaar",
   ],
   censor: "[REDACTED]",
 };

@@ -33,8 +33,19 @@ export const profileSchema = z.object({
   address: z.string().trim().max(500).nullish(),
 });
 
+// A Health Partner's referral code (docs/referrals.md), only when the profile
+// is created. Optional: empty or null = none. Matched case-insensitively by
+// the HP service.
+export const referralCodeSchema = z.preprocess(
+  (v) => (typeof v === "string" ? v.trim() || undefined : (v ?? undefined)),
+  z.string().max(30, "referralCode is at most 30 characters.").optional(),
+);
+
 // POST /api/v1/users/me: the profile plus consent to the privacy notice -
 // nothing is stored without it (DPDP Act). PUT /me/profile takes the same
 // consent when it creates the profile (old apps onboard that way).
-export const onboardingSchema = profileSchema.extend({ consent: selfConsentSchema });
-export const replaceProfileSchema = profileSchema.extend({ consent: selfConsentSchema.optional() });
+export const onboardingSchema = profileSchema.extend({ consent: selfConsentSchema, referralCode: referralCodeSchema });
+export const replaceProfileSchema = profileSchema.extend({
+  consent: selfConsentSchema.optional(),
+  referralCode: referralCodeSchema,
+});

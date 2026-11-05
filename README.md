@@ -32,7 +32,10 @@ Signup does not touch this service. After login the app calls:
    `consent: { noticeVersion, adultDeclaration: true }` → `201 { user, profile }`.
    Creates the user record (with `patientNumber`, e.g. `UYR-0000001`), the
    profile and the consent record in one transaction. `409 PROFILE_EXISTS` the
-   second time; `403 MINOR_ACCOUNT` for an under-18.
+   second time; `403 MINOR_ACCOUNT` for an under-18. Optional
+   `referralCode`: the Health Partner who brought the patient in; they earn the
+   referral once the patient links their own ABHA -
+   [docs/referrals.md](docs/referrals.md).
 
 Family members and medical records answer `404 PROFILE_REQUIRED` until then,
 and `403 CONSENT_REQUIRED` while the patient has not consented to the current
@@ -60,6 +63,7 @@ All under `/api/v1/users`. Errors: `{ "error": { "code", "message" } }`.
 | GET | `/me/health-records`, `/me/health-records/:id`, `.../attachments/:attachmentId` | records from providers (read-only) |
 | GET | `/me/medical-history` | `?memberId=self\|<id>` - self-recorded + provider records in one view |
 | GET / POST / DELETE | `/me/abha`, `/me/abha/otp`, `/me/abha/verify`, `/me/abha/:id` | link an ABHA to self or a family member |
+| GET / POST / DELETE | `/me/abha/create/...` | create an ABHA by Aadhaar OTP and link it (self only; optional, never part of profile creation) - [docs/abha-creation.md](docs/abha-creation.md) |
 | GET | `/family-members` | **internal**, for homebasedcare: `X-User-Id` only, no token (anyone who can reach the service can call it); consented members only |
 | GET | `/internal/v1/users/:userId` | **internal**, any service, no token (not via the gateway); optional `X-Service-Name: <caller>` for the audit, else `UNKNOWN`. `{ user, profile }` with `profile.age`; `?fields=fullName,age,gender,phone` returns only those (plus `user.id`) - any of `patientNumber status createdAt fullName dateOfBirth age gender phone bloodGroup address district pinCode`, unknown → `400`; `404` not onboarded, `403 CONSENT_REQUIRED` without CARE consent; audited |
 | POST | `/internal/v1/health-records` | **internal**, producers only (no token; not via the gateway) |
@@ -80,7 +84,7 @@ record shared with ABDM is written to `access_audit`.
 
 An in-process worker (`src/worker.ts`, every `ABDM_WORKER_INTERVAL_MS`)
 downloads attachments sent by URL, links care contexts in ABDM, runs ABDM
-data transfers, encrypts files stored before `DATA_ENCRYPTION_KEY` was set and,
+data transfers, tells the Health Partner service about referrals, encrypts files stored before `DATA_ENCRYPTION_KEY` was set and,
 hourly, deletes data past its retention window (docs/privacy.md). Jobs are rows claimed with `FOR UPDATE SKIP LOCKED`, so any
 number of replicas is safe. The Kafka consumer (`health-records.events`) starts
 when `KAFKA_BROKERS` is set.

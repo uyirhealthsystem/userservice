@@ -12,12 +12,37 @@ export interface Call {
   body: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
+// ABHA enrolment: what ABDM answers for the Aadhaar used. Tests change these.
+export interface FakeEnrolment {
+  isNew: boolean;
+  aadhaarMobile: string; // the mobile linked with the Aadhaar
+  profile: Record<string, unknown>;
+  takenAddresses: string[];
+  aadhaarsSeen: string[]; // decrypted, to prove the number reached ABDM encrypted
+}
+
+export const ENROL_PROFILE = {
+  ABHANumber: "91-5555-6666-7777",
+  firstName: "Ravi",
+  lastName: "Kumar",
+  gender: "M",
+  dob: "14-05-1990",
+  phrAddress: ["91555566667777@sbx"],
+};
+
 export function installFakeAbdm(profile: Record<string, unknown>) {
   const rsa = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const certificate = rsa.publicKey.export({ type: "spki", format: "der" }).toString("base64");
   const decrypt = (b64: string) =>
     privateDecrypt({ key: rsa.privateKey, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha1" }, Buffer.from(b64, "base64")).toString();
   const calls: Call[] = [];
+  const enrolment: FakeEnrolment = {
+    isNew: true,
+    aadhaarMobile: "9876543210",
+    profile: { ...ENROL_PROFILE },
+    takenAddresses: [],
+    aadhaarsSeen: [],
+  };
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
   const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
@@ -40,6 +65,27 @@ export function installFakeAbdm(profile: Record<string, unknown>) {
           : json({ message: "Invalid OTP" }, 400);
       case "/abha/api/v3/profile/account":
         return json(profile);
+      case "/abha/api/v3/enrollment/request/otp":
+        if (body.loginHint === "aadhaar") {
+          enrolment.aadhaarsSeen.push(decrypt(body.loginId));
+          return json({ txnId: "enrol-txn-1", message: "OTP sent to Aadhaar registered mobile number ending with ******3210" });
+        }
+        return json({ txnId: "enrol-txn-2", message: "OTP sent" });
+      case "/abha/api/v3/enrollment/enrol/byAadhar": {
+        if (decrypt(body.authData.otp.otpValue) !== "123456") return json({ message: "Invalid OTP" }, 400);
+        const mobile = body.authData.otp.mobile === enrolment.aadhaarMobile ? enrolment.aadhaarMobile : null;
+        return json({ txnId: "enrol-txn-1", isNew: enrolment.isNew, ABHAProfile: { ...enrolment.profile, mobile } });
+      }
+      case "/abha/api/v3/enrollment/auth/byAbdm":
+        return decrypt(body.authData.otp.otpValue) === "123456"
+          ? json({ txnId: "enrol-txn-2", authResult: "success" })
+          : json({ message: "Invalid OTP" }, 400);
+      case "/abha/api/v3/enrollment/enrol/suggestion":
+        return json({ txnId: "enrol-txn-1", abhaAddressList: ["ravi.kumar1990", "ravikumar.90"] });
+      case "/abha/api/v3/enrollment/enrol/abha-address":
+        return enrolment.takenAddresses.includes(body.abhaAddress)
+          ? json({ message: "ABHA address already exists" }, 400)
+          : json({ txnId: body.txnId, preferredAbhaAddress: `${body.abhaAddress}@sbx` });
     }
     // HIE-CM calls and the HIU push answer 202 with no body.
     return new Response(null, { status: 202 });
@@ -48,6 +94,7 @@ export function installFakeAbdm(profile: Record<string, unknown>) {
 
   return {
     calls,
+    enrolment,
     to: (path: string) => calls.filter((c) => c.path === path),
   };
 }

@@ -4,6 +4,7 @@ import { fetchPendingAttachments } from "./modules/records/attachments.fetcher";
 import { processCareContexts } from "./modules/abdm/careContexts";
 import { processDataRequests } from "./modules/abdm/dataTransfer";
 import { encryptStoredAttachments, runRetention } from "./modules/privacy/retention";
+import { processReferrals } from "./modules/referrals/referrals.service";
 
 // Background jobs, run in-process on an interval (retention itself at most
 // hourly). Each step claims its rows with SKIP LOCKED (lib/jobs.ts) or is
@@ -12,6 +13,7 @@ const steps = [
   ["attachments", fetchPendingAttachments],
   ["care-contexts", processCareContexts],
   ["data-transfers", processDataRequests],
+  ["referrals", processReferrals],
   ["encrypt-attachments", () => encryptStoredAttachments()],
   ["retention", () => runRetention()],
 ] as const;

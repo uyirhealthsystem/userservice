@@ -13,7 +13,7 @@ privacy notice (`PRIVACY_NOTICE_VERSION`).
 | Purpose | Covers | Needed for |
 |---|---|---|
 | `CARE` | storing and using health data to provide Uyir's services | everything under `/me/family-members`, `/me/medical`, `/me/health-records`, `/me/medical-history`, `/me/abha` |
-| `ABDM_SHARING` | linking an ABHA and sharing records through ABDM | `POST /me/abha/otp`, `/me/abha/verify` |
+| `ABDM_SHARING` | linking or creating an ABHA and sharing records through ABDM | `POST /me/abha/otp`, `/me/abha/verify`, every `/me/abha/create/...` step except the consent text and cancel |
 
 Each consent is a row in `privacy_consents` with the purpose, the notice
 version, the basis, when it was granted and when it was withdrawn. The row is
@@ -48,8 +48,10 @@ consent is given.
 **Withdrawal** (`DELETE /me/consents/:purpose?memberId=`) stops what the
 consent allowed:
 
-- `ABDM_SHARING`: the ABHA link and its care contexts are removed, so nothing
-  more is linked or shared.
+- `ABDM_SHARING`: the ABHA link and its care contexts are removed, and any ABHA
+  creation in progress is dropped, so nothing more is linked or shared. An ABHA
+  created through Uyir stays at ABDM: it belongs to the patient, and Uyir does
+  not delete it.
 - `CARE` for a family member: the member and all their data are erased.
 - `CARE` for the account holder: `409 ERASURE_REQUIRED`. Use `DELETE /me`.
 
@@ -68,8 +70,11 @@ These work without consent and before onboarding: provider records sent before
 the patient signed up are theirs too.
 
 **Erasure** deletes the profile, family members, every medical and provider
-record with its files, ABHA links (with their care contexts), pending ABHA OTPs
-and the nominee. It keeps the `access_audit` rows and the (now withdrawn)
+record with its files, ABHA links (with their care contexts), pending ABHA OTPs,
+ABHA creation in progress and the nominee. A Health Partner referral is
+cancelled at the HP service (or, if the patient had already linked their ABHA,
+still reported so the HP is paid) and then deleted; see
+[referrals.md](referrals.md). It keeps the `access_audit` rows and the (now withdrawn)
 consent rows, which hold no health data, as evidence until retention removes
 them. Records a producer sends after the erasure have no account, so they are
 treated as orphans (see below).
@@ -119,3 +124,24 @@ treated as orphans (see below).
   de-linking is not implemented.
 - **Significant Data Fiduciary duties** (DPO in India, DPIA, periodic audit)
   apply if the government notifies Uyir as one.
+
+## Health Partner referrals
+
+A referral code given at signup tells that Health Partner, through the HP
+service, when the patient joins and when they link their own ABHA. HP gets only
+the patient's user id. `rewarded_abhas` keeps a keyed hash of each ABHA that
+earned a reward - never the number, not tied to an account - so one ABHA earns
+one reward ever. The privacy notice should mention this. See
+[referrals.md](referrals.md).
+
+## ABHA creation and Aadhaar
+
+ABHA creation (`/me/abha/create/...`, see [abha-creation.md](abha-creation.md))
+needs the Aadhaar number for one request only. It is encrypted for ABDM, sent to
+ABDM and dropped. It is never written to the database, logs (redacted in
+`lib/logger.ts`), audit rows, error messages or responses. The patient accepts
+ABDM's Aadhaar consent text first. Its version and the time of acceptance are
+stored on the resulting ABHA link (`aadhaarConsentVersion`, `aadhaarConsentAt`)
+as evidence. `abha_enrolments` rows hold only ABDM's transaction id, the step,
+the chosen mobile and OTP counters. Retention removes them once nothing is in
+progress and the day's OTP count is older than 24 hours.

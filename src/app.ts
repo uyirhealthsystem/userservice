@@ -14,6 +14,7 @@ import { recordsRouter } from "./modules/records/records.routes";
 import { internalRecordsRouter } from "./modules/records/records.internal.routes";
 import { internalUsersRouter } from "./modules/users/users.internal.routes";
 import { abhaRouter } from "./modules/abdm/abha.routes";
+import { abhaEnrolmentRouter } from "./modules/abdm/abhaEnrolment.routes";
 import { abdmCallbacksRouter } from "./modules/abdm/abdm.callbacks.routes";
 import { privacyRouter, requireConsent } from "./modules/privacy/privacy.routes";
 
@@ -52,7 +53,7 @@ patientApi.use(usersRouter);
 patientApi.use("/me/nominee", requireUser);
 patientApi.use(privacyRouter);
 patientApi.use(DATA_PATHS, requireUser, requireConsent);
-patientApi.use(familyRouter, medicalRouter, recordsRouter, abhaRouter);
+patientApi.use(familyRouter, medicalRouter, recordsRouter, abhaEnrolmentRouter, abhaRouter);
 app.use(USERS_API_PREFIX, patientApi);
 
 app.use(notFoundHandler);

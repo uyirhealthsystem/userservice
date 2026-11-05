@@ -1,6 +1,7 @@
 import { prisma } from "../../lib/prisma";
 import { formatPatientNumber } from "../../lib/constants";
 import { linkSelect } from "../abdm/abha.service";
+import { onAccountErased, referralForExport } from "../referrals/referrals.service";
 import { consentSelect } from "./consent.service";
 
 // The patient's rights under the DPDP Act (s.11-s.14): a summary of what we
@@ -45,7 +46,7 @@ export async function dataSharing(userId: string) {
 /** Everything held about the account, as one JSON document. */
 export async function exportData(userId: string) {
   const omit = { userId: true } as const;
-  const [user, familyMembers, consents, conditions, allergies, medications, vitals, healthRecords, abhaLinks, sharing] =
+  const [user, familyMembers, consents, conditions, allergies, medications, vitals, healthRecords, abhaLinks, sharing, referral] =
     await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
@@ -65,6 +66,7 @@ export async function exportData(userId: string) {
       }),
       prisma.abhaLink.findMany({ where: { userId }, select: linkSelect }),
       dataSharing(userId),
+      referralForExport(userId),
     ]);
 
   return {
@@ -81,6 +83,8 @@ export async function exportData(userId: string) {
     healthRecords,
     abhaLinks,
     sharing,
+    // The Health Partner referral code given at signup, and how far it got.
+    referral,
   };
 }
 
@@ -91,9 +95,12 @@ export async function exportData(userId: string) {
  */
 export async function eraseAccount(userId: string, actorRole: string, requestId: string | null) {
   await prisma.$transaction(async (tx) => {
-    // Not relations of users: provider records and pending OTPs.
+    // Not relations of users: provider records, pending OTPs, ABHA creation.
     await tx.healthRecord.deleteMany({ where: { userId } });
     await tx.abhaOtpVerification.deleteMany({ where: { userId } });
+    await tx.abhaEnrolment.deleteMany({ where: { userId } });
+    // Health Partner referral: HP still hears what it must, then it goes.
+    await onAccountErased(tx, userId);
     // Cascades to profile, family, medical records, ABHA links (and their
     // care contexts) and nominee.
     await tx.user.deleteMany({ where: { id: userId } });

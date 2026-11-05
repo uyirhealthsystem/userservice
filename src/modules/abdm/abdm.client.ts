@@ -202,6 +202,132 @@ export async function getProfile(xToken: string): Promise<AbdmProfile> {
   );
 }
 
+// ── ABHA enrolment (creation by Aadhaar OTP) ────────────────────────────────
+//
+// Written from ABDM's ABHA v3 enrolment docs and tested against a fake ABDM:
+// check these paths and shapes in the sandbox before production.
+
+export const ENROL = {
+  requestOtp: "/abha/api/v3/enrollment/request/otp",
+  byAadhaar: "/abha/api/v3/enrollment/enrol/byAadhar",
+  byAbdm: "/abha/api/v3/enrollment/auth/byAbdm",
+  suggestion: "/abha/api/v3/enrollment/enrol/suggestion",
+  abhaAddress: "/abha/api/v3/enrollment/enrol/abha-address",
+} as const;
+
+export interface EnrolProfile {
+  ABHANumber?: string;
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  name?: string;
+  gender?: string;
+  dob?: string; // dd-mm-yyyy
+  mobile?: string | null;
+  phrAddress?: string[];
+  [key: string]: unknown;
+}
+
+export interface EnrolResult {
+  txnId?: string;
+  isNew: boolean;
+  profile: EnrolProfile;
+}
+
+const enrolUrl = (path: string) => `${env.abdm.abhaUrl}${path}`;
+
+async function enrolPost<T>(path: string, body: unknown, what: string): Promise<T> {
+  return call<T>(enrolUrl(path), { method: "POST", headers: await authHeaders(), body: JSON.stringify(body) }, what);
+}
+
+/** OTP to the Aadhaar-linked mobile. The Aadhaar number only leaves here encrypted. */
+export async function requestEnrolOtp(aadhaar: string): Promise<string> {
+  let body: { txnId?: string };
+  try {
+    body = await enrolPost(
+      ENROL.requestOtp,
+      { txnId: "", scope: ["abha-enrol"], loginHint: "aadhaar", loginId: await encrypt(aadhaar), otpSystem: "aadhaar" },
+      "enrolment OTP request",
+    );
+  } catch (err) {
+    if (err instanceof AbdmRejected) throw Errors.badRequest("ABHA_ENROLMENT_FAILED", err.message);
+    throw err;
+  }
+  if (!body?.txnId) throw Errors.abdmUnavailable("ABDM did not return a transaction id.");
+  return body.txnId;
+}
+
+/** Creates (or finds) the ABHA for the Aadhaar; undefined when ABDM refuses the OTP. */
+export async function enrolByAadhaar(txnId: string, otp: string, mobile: string, consentVersion: string): Promise<EnrolResult | undefined> {
+  let body: { txnId?: string; isNew?: boolean; ABHAProfile?: EnrolProfile };
+  try {
+    body = await enrolPost(
+      ENROL.byAadhaar,
+      {
+        authData: { authMethods: ["otp"], otp: { txnId, otpValue: await encrypt(otp), mobile } },
+        consent: { code: "abha-enrollment", version: consentVersion },
+      },
+      "enrolment by Aadhaar",
+    );
+  } catch (err) {
+    if (err instanceof AbdmRejected) return undefined; // wrong / expired OTP
+    throw err;
+  }
+  if (!body?.ABHAProfile?.ABHANumber) throw Errors.abdmUnavailable("ABDM did not return the ABHA.");
+  return { txnId: body.txnId, isNew: body.isNew !== false, profile: body.ABHAProfile };
+}
+
+/** OTP to the communication mobile; returns the transaction id to continue with. */
+export async function requestEnrolMobileOtp(txnId: string, mobile: string): Promise<string> {
+  let body: { txnId?: string };
+  try {
+    body = await enrolPost(
+      ENROL.requestOtp,
+      { txnId, scope: ["abha-enrol", "mobile-verify"], loginHint: "mobile", loginId: await encrypt(mobile), otpSystem: "abdm" },
+      "enrolment mobile OTP request",
+    );
+  } catch (err) {
+    if (err instanceof AbdmRejected) throw Errors.badRequest("ABHA_ENROLMENT_FAILED", err.message);
+    throw err;
+  }
+  return body?.txnId ?? txnId;
+}
+
+/** True when ABDM accepted the mobile OTP. */
+export async function verifyEnrolMobileOtp(txnId: string, otp: string): Promise<boolean> {
+  let body: { authResult?: string };
+  try {
+    body = await enrolPost(
+      ENROL.byAbdm,
+      { scope: ["abha-enrol", "mobile-verify"], authData: { authMethods: ["otp"], otp: { txnId, otpValue: await encrypt(otp) } } },
+      "enrolment mobile verification",
+    );
+  } catch (err) {
+    if (err instanceof AbdmRejected) return false;
+    throw err;
+  }
+  return body?.authResult === "success";
+}
+
+export async function abhaAddressSuggestions(txnId: string): Promise<string[]> {
+  const body = await call<{ abhaAddressList?: string[] }>(
+    enrolUrl(ENROL.suggestion),
+    { method: "GET", headers: { ...(await authHeaders()), Transaction_Id: txnId } },
+    "ABHA address suggestions",
+  );
+  return Array.isArray(body?.abhaAddressList) ? body.abhaAddressList : [];
+}
+
+/** Sets the ABHA address; returns it with ABDM's suffix. AbdmRejected when unavailable. */
+export async function setAbhaAddress(txnId: string, abhaAddress: string): Promise<string | undefined> {
+  const body = await enrolPost<{ preferredAbhaAddress?: string }>(
+    ENROL.abhaAddress,
+    { txnId, abhaAddress, preferred: 1 },
+    "ABHA address",
+  );
+  return body?.preferredAbhaAddress;
+}
+
 // ── HIE-CM (we are the HIP) ─────────────────────────────────────────────────
 
 /**

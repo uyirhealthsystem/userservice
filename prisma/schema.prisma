@@ -300,6 +300,12 @@ model AbhaLink {
   gender           String? // M | F | O
   yearOfBirth      Int?
   verifiedAt       DateTime
+  // LINKED (an existing ABHA, verified by OTP) | CREATED (enrolled here by
+  // Aadhaar OTP). For CREATED, the ABDM Aadhaar-consent text version the
+  // patient accepted, and when - evidence ABDM certification asks for.
+  source                String    @default("LINKED")
+  aadhaarConsentVersion String?
+  aadhaarConsentAt      DateTime?
   // HIP-initiated linking: ABDM answers generate-token asynchronously; the
   // request id is how its callback finds this row.
   linkToken        String?
@@ -332,6 +338,33 @@ model AbhaOtpVerification {
 
   @@unique([userId, subject])
   @@map("abha_otp_verifications")
+}
+
+// ABHA creation (enrolment by Aadhaar OTP) for a subject. One row per
+// subject, kept between attempts so the OTP limits survive a cancel; `step`
+// null = nothing in progress. Never holds the Aadhaar number. Steps:
+//   AADHAAR_OTP_SENT -> (ABHA created + linked) -> MOBILE_PENDING | ADDRESS_PENDING
+//   MOBILE_PENDING -> MOBILE_OTP_SENT -> ADDRESS_PENDING -> null
+model AbhaEnrolment {
+  id                    String    @id @default(uuid())
+  userId                String
+  subject               String // "self" (family members: phase 2)
+  step                  String?
+  txnId                 String? // ABDM's enrolment transaction
+  mobile                String? // communication mobile asked for at Aadhaar verification
+  abhaLinkId            String? // once the ABHA exists and is linked
+  aadhaarConsentVersion String?
+  aadhaarConsentAt      DateTime?
+  attempts              Int       @default(0) // wrong OTPs for the current OTP
+  expiresAt             DateTime?
+  lastOtpAt             DateTime? // resend cooldown
+  otpWindowStart        DateTime? // daily OTP cap
+  otpCount              Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([userId, subject])
+  @@map("abha_enrolments")
 }
 
 // One care context = one encounter (source + encounterId) of a subject with
@@ -434,4 +467,41 @@ model Nominee {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("nominees")
+}
+
+// ── Health Partner referrals (docs/referrals.md) ────────────────────────────
+
+// The Health Partner (HP) referral code a patient gave when creating their
+// profile. The HP service owns codes, referrals and rewards; this row is the
+// outbox that tells it what happened, retried by the worker until it answers:
+//   UNREGISTERED -> PENDING   (HP told: signed up with the code, no reward)
+//   -> QUALIFIED -> COMPLETED (patient's own ABHA linked; HP pays ₹10)
+//   CANCELLING -> INVALID     (HP told to cancel; `reason` says why)
+//   INVALID                   (HP refused the code, or the ABHA was rewarded before)
+// No relation to users on purpose: when the account is erased, a row HP must
+// still hear about (QUALIFIED / CANCELLING) outlives it, then is deleted.
+model PatientReferral {
+  userId        String    @id
+  code          String
+  status        String
+  reason        String?
+  qualifiedAt   DateTime?
+  attempts      Int       @default(0)
+  lastError     String?
+  nextAttemptAt DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@map("patient_referrals")
+}
+
+// ABHAs that have earned a referral reward - a keyed hash, not the number -
+// so one ABHA earns one reward ever, also after it is unlinked or the
+// account is erased and the ABHA linked again elsewhere.
+model RewardedAbha {
+  abhaHash  String   @id
+  createdAt DateTime @default(now())
+
+  @@map("rewarded_abhas")
 }

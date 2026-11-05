@@ -21,6 +21,18 @@ export async function runRetention(force = false): Promise<Record<string, number
     // Producer messages we could not store - kept for ops to look at, then gone.
     rejections: (await prisma.healthRecordRejection.deleteMany({ where: { at: { lt: daysAgo(days.rejections) } } })).count,
     expiredOtps: (await prisma.abhaOtpVerification.deleteMany({ where: { expiresAt: { lt: new Date() } } })).count,
+    // ABHA creation rows, once nothing is in progress (or it expired) and the
+    // day's OTP count no longer matters. They never hold an Aadhaar number.
+    abhaEnrolments: (
+      await prisma.abhaEnrolment.deleteMany({
+        where: {
+          AND: [
+            { OR: [{ step: null }, { expiresAt: { lt: new Date() } }] },
+            { OR: [{ otpWindowStart: null }, { otpWindowStart: { lt: daysAgo(1) } }] },
+          ],
+        },
+      })
+    ).count,
     // Finished ABDM transfers, and consents no longer usable.
     abdmDataRequests: (
       await prisma.abdmDataRequest.deleteMany({

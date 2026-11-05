@@ -100,9 +100,26 @@ const onboarding = folder(
       desc: "Nothing is stored without consent to the privacy notice (DPDP Act).",
       tests: errorCode(400, "VALIDATION_ERROR"),
     }),
+    req("Create profile with a too-long referral code (400)", "POST", `${U}/me`, {
+      body: { ...PROFILE, consent: CONSENT, referralCode: "X".repeat(31) },
+      desc: "`referralCode` is at most 30 characters. A code the Health Partner service doesn't know is `400 INVALID_REFERRAL_CODE` (needs HP_SERVICE_URL; see docs/referrals.md).",
+      tests: errorCode(400, "VALIDATION_ERROR"),
+    }),
+    req("Create profile with an unknown referral code (400 INVALID_REFERRAL_CODE)", "POST", `${U}/me`, {
+      body: { ...PROFILE, consent: CONSENT, referralCode: "HPNOSUCHCODE0" },
+      desc: "The Health Partner service doesn't know the code: refused, and nothing is created, so the patient can correct it or leave it empty. Runs only when `referralCode` is set in the environment (that is, userservice is wired to the HP service with `HP_SERVICE_URL`) - without HP the code would be accepted unchecked.",
+      pre: [
+        `if (!pm.variables.get("referralCode")) {`,
+        `  console.log("referralCode not set - skipping the HP code check");`,
+        `  pm.execution.skipRequest();`,
+        `}`,
+      ],
+      tests: errorCode(400, "INVALID_REFERRAL_CODE"),
+    }),
     req("Create my profile (onboarding)", "POST", `${U}/me`, {
-      body: { ...PROFILE, consent: CONSENT },
-      desc: "`201 { user: { id, status, createdAt, patientNumber }, profile }`. `fullName` and `consent` ({ noticeVersion, adultDeclaration: true }) are required. The user id is always the caller's - an `id` in the body is ignored.",
+      body: { ...PROFILE, consent: CONSENT, referralCode: "{{referralCode}}" },
+      desc: "`201 { user: { id, status, createdAt, patientNumber }, profile }`. `fullName` and `consent` ({ noticeVersion, adultDeclaration: true }) are required. The user id is always the caller's - an `id` in the body is ignored.\n\nOptional `referralCode` (at most 30 characters, any letter case; empty = none): the Health Partner who brought the patient in. Checked with the HP service (`400 INVALID_REFERRAL_CODE` if it doesn't know it, so the patient can correct it; accepted unchecked if HP is down or not configured). Only at creation. The HP earns ₹10 once the patient links their own ABHA - docs/referrals.md.\n\nHere it is the environment's `referralCode` - a real HP's code to try the referral flow, or empty.",
+      pre: [`if (!pm.variables.get("referralCode")) pm.variables.set("referralCode", ""); // unset = no code`],
       tests: [
         ...status(201),
         `const j = pm.response.json();`,
@@ -128,6 +145,11 @@ const onboarding = folder(
       body: { fullName: "Ravi Kumar", dateOfBirth: "1990-05-14", gender: "MALE", bloodGroup: "O+", district: "Chennai", pinCode: "600040" },
       desc: "Full replace - optional fields left out (here `phone`, `address`) are cleared. Before onboarding a PUT creates the profile instead (`201`), like the old authservice endpoint.",
       tests: [...status(200), `pm.test("omitted field cleared", () => pm.expect(pm.response.json().profile.phone).to.eql(null));`],
+    }),
+    req("Replace profile with a referral code (400 REFERRAL_CODE_SIGNUP_ONLY)", "PUT", `${U}/me/profile`, {
+      body: { fullName: "Ravi Kumar", referralCode: "HPXXXXXXXX" },
+      desc: "A referral code can only be given when the profile is created.",
+      tests: errorCode(400, "REFERRAL_CODE_SIGNUP_ONLY"),
     }),
   ],
 );
@@ -327,7 +349,15 @@ const privacy = folder(
     }),
     req("Export my data", "GET", `${U}/me/export`, {
       desc: "Everything held about the account as one JSON download. Attachment files are fetched separately.",
-      tests: [...status(200), `pm.test("profile included", () => pm.expect(pm.response.json().profile.fullName).to.eql("Ravi Kumar"));`],
+      tests: [
+        ...status(200),
+        `const j = pm.response.json();`,
+        `pm.test("profile included", () => pm.expect(j.profile.fullName).to.eql("Ravi Kumar"));`,
+        `const code = pm.variables.get("referralCode");`,
+        `pm.test("referral: the code given at signup, or null", () => code`,
+        `  ? pm.expect(j.referral && j.referral.code).to.eql(code)`,
+        `  : pm.expect(j.referral).to.eql(null));`,
+      ],
     }),
     req("Set nominee", "PUT", `${U}/me/nominee`, {
       body: { fullName: "Meena", relationship: "SPOUSE", phone: "9876543210", email: "meena@example.com" },
@@ -335,6 +365,107 @@ const privacy = folder(
       tests: status(200),
     }),
     req("Get nominee", "GET", `${U}/me/nominee`, { tests: status(200) }),
+  ],
+);
+
+// ABHA creation by Aadhaar OTP. Optional, after the profile exists. The
+// steps that reach ABDM need a real Aadhaar and the OTPs sent to its mobile,
+// so they skip themselves unless `aadhaar` is set in the environment.
+const SKIP_WITHOUT_AADHAAR = [
+  `if (!pm.variables.get("aadhaar")) {`,
+  `  console.log("aadhaar not set - skipping the real ABHA creation step");`,
+  `  pm.execution.skipRequest();`,
+  `}`,
+];
+const NOT_FOUND_OR_UNCONFIGURED = [
+  `pm.test("404 ABHA_ENROLMENT_NOT_FOUND, or 503 without ABDM credentials", () => {`,
+  `  const code = pm.response.json().error.code;`,
+  `  pm.expect(["ABHA_ENROLMENT_NOT_FOUND", "ABDM_NOT_CONFIGURED"]).to.include(code);`,
+  `});`,
+];
+
+const abhaCreation = folder(
+  "ABHA creation",
+  [
+    "Creates an ABHA for a patient who has none, by Aadhaar OTP, and links it. **Optional and separate from profile creation** - `POST /me` never calls ABDM. Self only for now; family members link an existing ABHA instead.",
+    "",
+    "Flow: consent text → Aadhaar OTP → verify (ABHA created and linked, 201, `next`) → [mobile OTP + verify when `next` is `MOBILE_VERIFY`] → address suggestions → choose address. `next: DONE` means the Aadhaar already had an ABHA and it was linked.",
+    "",
+    "The real steps run only when the environment sets `aadhaar` (secret) and, one at a time, `aadhaarOtp` / `mobileOtp` from the SMS - otherwise they are skipped. The Aadhaar number is never stored or logged by userservice.",
+    "",
+    "Contract: `docs/abha-creation.md`.",
+  ].join("\n"),
+  [
+    req("Consent to ABDM sharing (for ABHA creation)", "POST", `${U}/me/consents`, {
+      body: { purpose: "ABDM_SHARING", ...CONSENT },
+      desc: "Every ABHA creation step needs this consent (`403 CONSENT_REQUIRED` otherwise).",
+      tests: status(201),
+    }),
+    req("Aadhaar consent text", "GET", `${U}/me/abha/create/consent-text`, {
+      desc: "ABDM's Aadhaar consent - show it word for word before the Aadhaar field, and send its `version` back.",
+      tests: [
+        ...status(200),
+        `const j = pm.response.json();`,
+        `pm.test("text and version", () => { pm.expect(j.text).to.be.a("string"); pm.expect(j.code).to.eql("abha-enrollment"); });`,
+        `pm.collectionVariables.set("aadhaarConsentVersion", j.version);`,
+      ],
+    }),
+    req("Aadhaar OTP - invalid number (400)", "POST", `${U}/me/abha/create/aadhaar/otp`, {
+      body: { aadhaar: "234123412345", consent: { accepted: true, version: "{{aadhaarConsentVersion}}" } },
+      desc: "12 digits with a Verhoeff check digit, checked before anything reaches ABDM. The number is never echoed back.",
+      tests: [...errorCode(400, "VALIDATION_ERROR"), `pm.test("not echoed", () => pm.expect(pm.response.text()).to.not.include("234123412345"));`],
+    }),
+    req("Aadhaar OTP for a family member (400 self only)", "POST", `${U}/me/abha/create/aadhaar/otp`, {
+      body: { memberId: "{{familyMemberId}}", aadhaar: "999941057058", consent: { accepted: true, version: "{{aadhaarConsentVersion}}" } },
+      tests: errorCode(400, "ABHA_CREATE_SELF_ONLY"),
+    }),
+    req("Choose address before creating (404)", "POST", `${U}/me/abha/create/address`, {
+      body: { abhaAddress: "ravi.kumar1990" },
+      desc: "Each step checks the creation is at the right point.",
+      tests: NOT_FOUND_OR_UNCONFIGURED,
+    }),
+    req("Send Aadhaar OTP", "POST", `${U}/me/abha/create/aadhaar/otp`, {
+      body: { aadhaar: "{{aadhaar}}", consent: { accepted: true, version: "{{aadhaarConsentVersion}}" } },
+      pre: SKIP_WITHOUT_AADHAAR,
+      desc: "OTP to the Aadhaar-linked mobile. `409 ABHA_ALREADY_LINKED` if this person has an ABHA; `429` within a minute of the last OTP or after 5 OTPs in a day; `400 AADHAAR_CONSENT_OUTDATED` for an old consent version.",
+      tests: status(200),
+    }),
+    req("Verify Aadhaar OTP (creates and links the ABHA)", "POST", `${U}/me/abha/create/aadhaar/verify`, {
+      body: { otp: "{{aadhaarOtp}}", mobile: "{{abhaMobile}}" },
+      pre: SKIP_WITHOUT_AADHAAR,
+      desc: "`mobile` is optional (defaults to the profile's phone). 201 with `abhaLink`, `isNew` and `next`: `ABHA_ADDRESS`, `MOBILE_VERIFY` (the mobile isn't the Aadhaar's) or `DONE` (the Aadhaar already had an ABHA). `409 ABHA_IN_USE` / `ABHA_DEMOGRAPHIC_MISMATCH` and it is not linked. `OTP_INVALID`, and after 3 wrong OTPs `OTP_ATTEMPTS_EXCEEDED`.",
+      tests: [...status(201), `pm.test("linked", () => pm.expect(pm.response.json().abhaLink.source).to.eql("CREATED"));`],
+    }),
+    req("Send mobile OTP", "POST", `${U}/me/abha/create/mobile/otp`, {
+      body: {},
+      pre: [...SKIP_WITHOUT_AADHAAR, `if (!pm.variables.get("mobileOtp")) pm.execution.skipRequest();`],
+      desc: "Only when `next` was `MOBILE_VERIFY`. Skippable - the ABHA then has no communication mobile. Set `mobileOtp` to run it.",
+      tests: status(200),
+    }),
+    req("Verify mobile OTP", "POST", `${U}/me/abha/create/mobile/verify`, {
+      body: { otp: "{{mobileOtp}}" },
+      pre: [...SKIP_WITHOUT_AADHAAR, `if (!pm.variables.get("mobileOtp")) pm.execution.skipRequest();`],
+      tests: [...status(200), `pm.test("next: address", () => pm.expect(pm.response.json().next).to.eql("ABHA_ADDRESS"));`],
+    }),
+    req("ABHA address suggestions", "GET", `${U}/me/abha/create/address-suggestions`, {
+      pre: SKIP_WITHOUT_AADHAAR,
+      desc: "`{ suggestions, suffix }` - suffix `@sbx` in the sandbox, `@abdm` in production.",
+      tests: [
+        ...status(200),
+        `const s = pm.response.json().suggestions;`,
+        `if (s.length && !pm.variables.get("abhaAddress")) pm.collectionVariables.set("abhaAddress", s[0]);`,
+      ],
+    }),
+    req("Choose ABHA address", "POST", `${U}/me/abha/create/address`, {
+      body: { abhaAddress: "{{abhaAddress}}" },
+      pre: SKIP_WITHOUT_AADHAAR,
+      desc: "8-18 letters/digits, at most one `.` or `_`, without the suffix. `409 ABHA_ADDRESS_TAKEN` when ABDM says it is in use. Ends the creation.",
+      tests: status(200),
+    }),
+    req("Cancel ABHA creation", "DELETE", `${U}/me/abha/create`, {
+      desc: "Stops a creation in progress. An ABHA already created stays linked - unlink it with `DELETE /me/abha/:id`. Always 204.",
+      tests: status(204),
+    }),
   ],
 );
 
@@ -420,11 +551,11 @@ const collection = {
     ].join("\n"),
     schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
   },
-  item: [health, onboarding, family, medical, healthRecords, privacy, access, cleanup],
+  item: [health, onboarding, family, medical, healthRecords, privacy, abhaCreation, access, cleanup],
   variable: [
     { key: "baseUrl", value: "http://localhost:8089" },
     { key: "gatewaySecret", value: "" },
-    ...["userId", "otherUserId", "patientNumber", "familyMemberId", "conditionId", "allergyId", "medicationId", "vitalId", "sourceRecordId", "healthRecordId", "attachmentId"].map(
+    ...["userId", "otherUserId", "patientNumber", "familyMemberId", "conditionId", "allergyId", "medicationId", "vitalId", "sourceRecordId", "healthRecordId", "attachmentId", "aadhaarConsentVersion", "abhaAddress"].map(
       (key) => ({ key, value: "" }),
     ),
   ],
@@ -438,6 +569,14 @@ const environment = {
   values: [
     { key: "baseUrl", value: "http://localhost:8089", type: "default", enabled: true },
     { key: "gatewaySecret", value: "", type: "secret", enabled: true },
+    // ABHA creation (optional): a real Aadhaar and the OTPs from its SMS.
+    { key: "aadhaar", value: "", type: "secret", enabled: true },
+    { key: "aadhaarOtp", value: "", type: "secret", enabled: true },
+    { key: "abhaMobile", value: "", type: "default", enabled: true },
+    { key: "mobileOtp", value: "", type: "secret", enabled: true },
+    // Health Partner referral (optional): a real HP's referral code. Needs
+    // userservice started with HP_SERVICE_URL. Empty = onboard without one.
+    { key: "referralCode", value: "", type: "default", enabled: true },
   ],
   _postman_variable_scope: "environment",
 };
