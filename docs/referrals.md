@@ -123,4 +123,13 @@ Health Partner when the patient joins and links an ABHA; bump
 ## Tests
 
 - `test/referrals.test.ts` - 22 cases against `test/fakeHp.ts` (and the fake ABDM).
-- HP: Postman collection folder *4. Referrals* and *7. Validation Checks*.
+- userservice Postman collection (`postman/generate.mjs`): onboarding sends the
+  environment's `referralCode`. Leave it empty for a plain run. Set it to a real
+  HP's code, with userservice started with `HP_SERVICE_URL`, to also run the
+  unknown-code `400` check and see the referral in the export.
+- HP Postman collection: folder *4. Referrals* plays userservice against the
+  internal API (saved example responses document each call); *7. Validation
+  Checks* covers the error codes.
+- api-gateway `uyir-all-services` collection: the patient in *10 · User
+  Service* onboards with the code of the HP created in *07 · Health Partner
+  Service* (`hpReferralCode`), so a full run goes through the referral flow.

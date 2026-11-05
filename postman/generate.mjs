@@ -105,9 +105,21 @@ const onboarding = folder(
       desc: "`referralCode` is at most 30 characters. A code the Health Partner service doesn't know is `400 INVALID_REFERRAL_CODE` (needs HP_SERVICE_URL; see docs/referrals.md).",
       tests: errorCode(400, "VALIDATION_ERROR"),
     }),
+    req("Create profile with an unknown referral code (400 INVALID_REFERRAL_CODE)", "POST", `${U}/me`, {
+      body: { ...PROFILE, consent: CONSENT, referralCode: "HPNOSUCHCODE0" },
+      desc: "The Health Partner service doesn't know the code: refused, and nothing is created, so the patient can correct it or leave it empty. Runs only when `referralCode` is set in the environment (that is, userservice is wired to the HP service with `HP_SERVICE_URL`) - without HP the code would be accepted unchecked.",
+      pre: [
+        `if (!pm.variables.get("referralCode")) {`,
+        `  console.log("referralCode not set - skipping the HP code check");`,
+        `  pm.execution.skipRequest();`,
+        `}`,
+      ],
+      tests: errorCode(400, "INVALID_REFERRAL_CODE"),
+    }),
     req("Create my profile (onboarding)", "POST", `${U}/me`, {
-      body: { ...PROFILE, consent: CONSENT },
-      desc: "`201 { user: { id, status, createdAt, patientNumber }, profile }`. `fullName` and `consent` ({ noticeVersion, adultDeclaration: true }) are required. The user id is always the caller's - an `id` in the body is ignored.\n\nOptional `referralCode`: the Health Partner who brought the patient in. Checked with the HP service (`400 INVALID_REFERRAL_CODE` if it doesn't know it, so the patient can correct it; accepted unchecked if HP is down). The HP earns ₹10 once the patient links their own ABHA - docs/referrals.md.",
+      body: { ...PROFILE, consent: CONSENT, referralCode: "{{referralCode}}" },
+      desc: "`201 { user: { id, status, createdAt, patientNumber }, profile }`. `fullName` and `consent` ({ noticeVersion, adultDeclaration: true }) are required. The user id is always the caller's - an `id` in the body is ignored.\n\nOptional `referralCode` (at most 30 characters, any letter case; empty = none): the Health Partner who brought the patient in. Checked with the HP service (`400 INVALID_REFERRAL_CODE` if it doesn't know it, so the patient can correct it; accepted unchecked if HP is down or not configured). Only at creation. The HP earns ₹10 once the patient links their own ABHA - docs/referrals.md.\n\nHere it is the environment's `referralCode` - a real HP's code to try the referral flow, or empty.",
+      pre: [`if (!pm.variables.get("referralCode")) pm.variables.set("referralCode", ""); // unset = no code`],
       tests: [
         ...status(201),
         `const j = pm.response.json();`,
@@ -337,7 +349,15 @@ const privacy = folder(
     }),
     req("Export my data", "GET", `${U}/me/export`, {
       desc: "Everything held about the account as one JSON download. Attachment files are fetched separately.",
-      tests: [...status(200), `pm.test("profile included", () => pm.expect(pm.response.json().profile.fullName).to.eql("Ravi Kumar"));`],
+      tests: [
+        ...status(200),
+        `const j = pm.response.json();`,
+        `pm.test("profile included", () => pm.expect(j.profile.fullName).to.eql("Ravi Kumar"));`,
+        `const code = pm.variables.get("referralCode");`,
+        `pm.test("referral: the code given at signup, or null", () => code`,
+        `  ? pm.expect(j.referral && j.referral.code).to.eql(code)`,
+        `  : pm.expect(j.referral).to.eql(null));`,
+      ],
     }),
     req("Set nominee", "PUT", `${U}/me/nominee`, {
       body: { fullName: "Meena", relationship: "SPOUSE", phone: "9876543210", email: "meena@example.com" },
@@ -554,6 +574,9 @@ const environment = {
     { key: "aadhaarOtp", value: "", type: "secret", enabled: true },
     { key: "abhaMobile", value: "", type: "default", enabled: true },
     { key: "mobileOtp", value: "", type: "secret", enabled: true },
+    // Health Partner referral (optional): a real HP's referral code. Needs
+    // userservice started with HP_SERVICE_URL. Empty = onboard without one.
+    { key: "referralCode", value: "", type: "default", enabled: true },
   ],
   _postman_variable_scope: "environment",
 };
