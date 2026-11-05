@@ -59,7 +59,7 @@ sudo chmod 440 /etc/sudoers.d/userservice-deploy
 cat <<EOF
 
 Done. Next:
-  1. Edit  $ROOT/shared/userservice.env   (DATABASE_URL, GATEWAY_SECRET, DATA_ENCRYPTION_KEY...)
+  1. Edit  $ROOT/shared/userservice.env   (DATABASE_URL, GATEWAY_SECRET, DATA_ENCRYPTION_KEY, HP_SERVICE_URL...)
   2. Make sure the DB is reachable and the schema user can CREATE.
   3. Add these GitHub repo secrets (Settings > Secrets and variables > Actions):
        EC2_HOST     = this host's public DNS / IP
